@@ -6,7 +6,7 @@ seam: all behavior worth asserting lives here, free of I/O.
 
 from .application import Application, ApplicationStatus
 from .artifact import Artifact, ArtifactOrigin, ArtifactType
-from .company import Company, EmployerRole
+from .company import Company, CompanyRegistry, EmployerRole
 from .identities import Role, User
 from .job import Job, JobStatus
 from .profile import SeekerProfile
@@ -15,6 +15,7 @@ __all__ = [
     "User",
     "Role",
     "Company",
+    "CompanyRegistry",
     "EmployerRole",
     "Job",
     "JobStatus",

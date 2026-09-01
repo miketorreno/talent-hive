@@ -1,7 +1,7 @@
 import pytest
 from domain.application import Application, ApplicationError, ApplicationStatus
 from domain.artifact import Artifact, ArtifactError, ArtifactOrigin, ArtifactType
-from domain.company import Company, CompanyError, EmployerRole
+from domain.company import Company, CompanyError, CompanyRegistry, EmployerRole
 from domain.identities import Role, RoleError, User
 from domain.job import Job, JobError, JobStatus
 from domain.profile import ProfileError, SeekerProfile
@@ -155,6 +155,13 @@ class TestApplicationStateMachine:
         app.withdraw()
         assert app.status == ApplicationStatus.WITHDRAWN
 
+    def test_withdraw_from_shortlisted(self):
+        app = self._new_app()
+        app.start_review()
+        app.shortlist()
+        app.withdraw()
+        assert app.status == ApplicationStatus.WITHDRAWN
+
     def test_cannot_further_transition_withdrawn(self):
         app = self._new_app()
         app.withdraw()
@@ -170,6 +177,10 @@ class TestArtifact:
     def test_user_uploaded_needs_storage_key(self):
         with pytest.raises(ArtifactError):
             Artifact(ArtifactType.RESUME, 1, ArtifactOrigin.USER_UPLOADED)
+
+    def test_user_written_needs_text(self):
+        with pytest.raises(ArtifactError):
+            Artifact(ArtifactType.RESUME, 1, ArtifactOrigin.USER_WRITTEN)
 
     def test_uploaded_artifact_accepts_key(self):
         a = Artifact(ArtifactType.RESUME, 1, ArtifactOrigin.USER_UPLOADED, storage_key="s3://x")
@@ -234,6 +245,74 @@ class TestCompany:
         c.set_owner(7)
         assert c.is_member(7)
         assert not c.is_member(5)
+
+
+class TestCompanyRegistry:
+    def _company(self, company_id: str, owner_id: int | None) -> Company:
+        return Company(id=company_id, name="Acme", owner_id=owner_id)
+
+    def _get(self, registry: CompanyRegistry, company_id: str) -> Company:
+        company = registry.get(company_id)
+        assert company is not None
+        return company
+
+    def test_register_first_company(self):
+        registry = CompanyRegistry()
+        registry.add_company(self._company("c1", owner_id=7))
+        assert registry.get("c1") is not None
+
+    def test_same_owner_cannot_start_second_company(self):
+        registry = CompanyRegistry()
+        registry.add_company(self._company("c1", owner_id=7))
+        with pytest.raises(CompanyError):
+            registry.add_company(self._company("c2", owner_id=7))
+
+    def test_distinct_owners_may_each_have_a_company(self):
+        registry = CompanyRegistry()
+        registry.add_company(self._company("c1", owner_id=7))
+        registry.add_company(self._company("c2", owner_id=8))
+        assert registry.get("c1") and registry.get("c2")
+
+    def test_duplicate_company_id_rejected(self):
+        registry = CompanyRegistry()
+        registry.add_company(self._company("c1", owner_id=7))
+        with pytest.raises(CompanyError):
+            registry.add_company(self._company("c1", owner_id=8))
+
+    def test_registering_unowned_company_is_allowed(self):
+        registry = CompanyRegistry()
+        company = self._company("c1", owner_id=None)
+        registry.add_company(company)
+        assert registry.get("c1") is company
+
+    def test_set_owner_after_registration(self):
+        registry = CompanyRegistry()
+        registry.add_company(self._company("c1", owner_id=None))
+        registry.set_owner("c1", 7)
+        assert self._get(registry, "c1").owner_id == 7
+
+    def test_cannot_give_unowned_company_to_busy_owner(self):
+        registry = CompanyRegistry()
+        registry.add_company(self._company("c1", owner_id=7))
+        registry.add_company(self._company("c2", owner_id=None))
+        with pytest.raises(CompanyError):
+            registry.set_owner("c2", 7)
+
+    def test_set_owner_unknown_company_rejected(self):
+        registry = CompanyRegistry()
+        with pytest.raises(CompanyError):
+            registry.set_owner("nope", 7)
+
+    def test_reset_owner_to_same_owner_is_idempotent(self):
+        registry = CompanyRegistry()
+        registry.add_company(self._company("c1", owner_id=None))
+        registry.set_owner("c1", 7)
+        registry.set_owner("c1", 7)
+        assert self._get(registry, "c1").owner_id == 7
+
+    def test_unknown_company_is_none(self):
+        registry = CompanyRegistry()
+        assert registry.get("nope") is None
 
 
 class TestSeekerProfile:
