@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "bot"
+version = "0.1.0"
+description = "Telegram gateway for Talent Hive"
+authors = ["Mike Torreno"]
+
+[tool.poetry.scripts]
+talent-hive-bot = "bot.main:main"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+domain = { path = "../domain", develop = true }
+shared = { path = "../shared", develop = true }
+python-telegram-bot = "^21.0"
+redis = "^5.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

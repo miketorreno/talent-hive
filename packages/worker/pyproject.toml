@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "worker"
+version = "0.1.0"
+description = "arq worker consuming AI generation jobs for Talent Hive"
+authors = ["Mike Torreno"]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+domain = { path = "../domain", develop = true }
+ai = { path = "../ai", develop = true }
+shared = { path = "../shared", develop = true }
+arq = "^0.26"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

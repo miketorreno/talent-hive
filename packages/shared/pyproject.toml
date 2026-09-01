@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "shared"
+version = "0.1.0"
+description = "Common config and types for Talent Hive"
+authors = ["Mike Torreno"]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+pydantic = "^2.6"
+pydantic-settings = "^2.2"
+redis = "^5.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
