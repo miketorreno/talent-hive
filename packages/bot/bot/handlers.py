@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional, cast
 
 from domain.identities import Role, User
-from shared.store import UserRepository
+from shared.store import Store
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
@@ -38,8 +38,8 @@ def _labels(roles: set[Role]) -> str:
     return ", ".join(_CHOICE_LABEL[r] for r in sorted(roles, key=lambda r: r.value))
 
 
-async def _store(context: ContextTypes.DEFAULT_TYPE) -> Optional[UserRepository]:
-    return cast(Optional[UserRepository], context.bot_data.get("user_store"))
+async def _store(context: ContextTypes.DEFAULT_TYPE) -> Optional[Store]:
+    return cast(Optional[Store], context.bot_data.get("store"))
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -49,7 +49,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     existing = None
     store = await _store(context)
     if store is not None:
-        existing = await store.get(user.id)
+        existing = await store.users.get(user.id)
     roles = existing.roles if existing else frozenset()
     if roles:
         await update.effective_chat.send_message(
@@ -76,10 +76,10 @@ async def on_role(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     store = await _store(context)
     if store is not None and roles:
-        account = await store.get(user.id) or User(telegram_id=user.id)
+        account = await store.users.get(user.id) or User(telegram_id=user.id)
         for role in roles:
             account = account.add_role(role)
-        await store.save(account)
+        await store.users.save(account)
 
     await query.edit_message_text(
         f"You're all set as **{_labels(roles)}**!", parse_mode=ParseMode.MARKDOWN
