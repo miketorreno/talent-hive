@@ -1,6 +1,5 @@
-import builtins
-
 import pytest
+from _bot_helpers import FakeContext, FakeUpdate, make_store, register_employer
 from bot.employers import (
     add_recruiter,
     archive,
@@ -11,109 +10,21 @@ from bot.employers import (
     set_description,
     set_requirements,
 )
-from domain.identities import Role, User
-from shared.store import (
-    RedisCompanyRepository,
-    RedisJobRepository,
-    RedisUserRepository,
-    Store,
-)
-
-Set = builtins.set
 
 
-class FakeRedis:
-    """In-memory stand-in for the redis commands the repositories use."""
-
-    def __init__(self) -> None:
-        self._strings: dict[str, str] = {}
-        self._sets: dict[str, Set[bytes]] = {}
-
-    async def get(self, key: str) -> str | None:
-        return self._strings.get(key)
-
-    async def set(self, key: str, value: str) -> None:
-        self._strings[key] = value
-
-    async def delete(self, key: str) -> int:
-        existed = key in self._strings
-        self._strings.pop(key, None)
-        return 1 if existed else 0
-
-    async def smembers(self, key: str) -> Set[bytes]:
-        return Set(self._sets.get(key, Set()))
-
-    async def sadd(self, key: str, *values: str) -> int:
-        self._sets.setdefault(key, Set()).update(v.encode() for v in values)
-        return len(values)
-
-    async def srem(self, key: str, *removals: str) -> int:
-        bucket = self._sets.get(key, Set())
-        removed = 0
-        for v in removals:
-            if v.encode() in bucket:
-                bucket.remove(v.encode())
-                removed += 1
-        return removed
-
-    async def smismember(self, key: str, *members: str) -> list[int]:
-        bucket = self._sets.get(key, Set())
-        return [1 if m.encode() in bucket else 0 for m in members]
-
-
-class FakeChat:
-    def __init__(self) -> None:
-        self.messages: list[str] = []
-
-    async def send_message(self, text: str, **_: object) -> None:
-        self.messages.append(text)
-
-
-class FakeUser:
-    def __init__(self, user_id: int) -> None:
-        self.id = user_id
-
-
-class FakeUpdate:
-    def __init__(self, user_id: int) -> None:
-        self.effective_user = FakeUser(user_id)
-        self.effective_chat = FakeChat()
-        self.callback_query = None
-
-
-class FakeContext:
-    def __init__(self, store: Store, args: list[str] | None = None) -> None:
-        self.bot_data: dict[str, object] = {"store": store}
-        self.args = args or []
-
-
-def make_store() -> Store:
-    redis = FakeRedis()
-    return Store(
-        users=RedisUserRepository(redis),  # type: ignore[arg-type]
-        companies=RedisCompanyRepository(redis),  # type: ignore[arg-type]
-        jobs=RedisJobRepository(redis),  # type: ignore[arg-type]
-    )
-
-
-async def _register_employer(store: Store, user_id: int) -> None:
-    await store.users.save(User(telegram_id=user_id, roles=frozenset({Role.EMPLOYER})))
-
-
-async def _create_company(store: Store, owner: int, name: str) -> None:
-    await _register_employer(store, owner)
+async def _create_company(store, owner: int, name: str) -> None:
+    await register_employer(store, owner)
     await company(FakeUpdate(owner), FakeContext(store, [name]))  # type: ignore[arg-type]
 
 
-async def _create_job(store: Store, user_id: int, title: str) -> Store:
+async def _create_job(store, user_id: int, title: str) -> None:
     await new_job(FakeUpdate(user_id), FakeContext(store, [title]))  # type: ignore[arg-type]
-    return store
 
 
 @pytest.mark.asyncio
 async def test_employer_creates_company_and_becomes_owner() -> None:
     store = make_store()
-    await _register_employer(store, 1)
+    await register_employer(store, 1)
     update = FakeUpdate(1)
     context = FakeContext(store, ["Acme"])
 
@@ -143,7 +54,7 @@ async def test_employer_cannot_create_second_company() -> None:
 async def test_owner_adds_recruiter() -> None:
     store = make_store()
     await _create_company(store, 1, "Acme")
-    await _register_employer(store, 9)
+    await register_employer(store, 9)
 
     update = FakeUpdate(1)
     await add_recruiter(update, FakeContext(store, ["9"]))  # type: ignore[arg-type]
@@ -157,7 +68,7 @@ async def test_owner_adds_recruiter() -> None:
 async def test_non_owner_cannot_add_recruiter() -> None:
     store = make_store()
     await _create_company(store, 1, "Acme")
-    await _register_employer(store, 9)
+    await register_employer(store, 9)
 
     update = FakeUpdate(9)
     await add_recruiter(update, FakeContext(store, ["2"]))  # type: ignore[arg-type]

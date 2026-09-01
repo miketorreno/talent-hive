@@ -5,9 +5,17 @@ import logging
 
 from redis import asyncio as aioredis
 from shared.config import get_settings
-from shared.store import RedisCompanyRepository, RedisJobRepository, RedisUserRepository, Store
+from shared.store import (
+    RedisApplicationRepository,
+    RedisCompanyRepository,
+    RedisJobRepository,
+    RedisSeekerProfileRepository,
+    RedisUserRepository,
+    Store,
+)
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler
 
+from .applications import accept, applications, reject, review, shortlist
 from .employers import (
     add_recruiter,
     archive,
@@ -21,6 +29,17 @@ from .employers import (
     set_requirements,
 )
 from .handlers import on_role, start
+from .seekers import (
+    add_experience,
+    add_skill,
+    apply,
+    background,
+    jobs,
+    my_applications,
+    profile,
+    seeker_help,
+    withdraw,
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -31,6 +50,8 @@ def build_application(token: str, redis_url: str) -> Application:
         users=RedisUserRepository(redis),
         companies=RedisCompanyRepository(redis),
         jobs=RedisJobRepository(redis),
+        profiles=RedisSeekerProfileRepository(redis),
+        applications=RedisApplicationRepository(redis),
     )
 
     app = Application.builder().token(token).build()
@@ -47,6 +68,20 @@ def build_application(token: str, redis_url: str) -> Application:
     app.add_handler(CommandHandler("archive", archive))
     app.add_handler(CommandHandler("myjobs", my_jobs))
     app.add_handler(CommandHandler("employer", employer_help))
+    app.add_handler(CommandHandler("applications", applications))
+    app.add_handler(CommandHandler("review", review))
+    app.add_handler(CommandHandler("shortlist", shortlist))
+    app.add_handler(CommandHandler("accept", accept))
+    app.add_handler(CommandHandler("reject", reject))
+    app.add_handler(CommandHandler("profile", profile))
+    app.add_handler(CommandHandler("addskill", add_skill))
+    app.add_handler(CommandHandler("addexperience", add_experience))
+    app.add_handler(CommandHandler("background", background))
+    app.add_handler(CommandHandler("jobs", jobs))
+    app.add_handler(CommandHandler("apply", apply))
+    app.add_handler(CommandHandler("myapps", my_applications))
+    app.add_handler(CommandHandler("withdraw", withdraw))
+    app.add_handler(CommandHandler("seeker", seeker_help))
     return app
 
 

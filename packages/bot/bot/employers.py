@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, cast
+from typing import Callable
 from uuid import uuid4
 
 from domain.company import Company
@@ -8,6 +8,8 @@ from domain.job import Job, JobError
 from shared.store import Store
 from telegram import Update
 from telegram.ext import ContextTypes
+
+from .common import get_store, require_company, require_employer, user_id
 
 _HELP = (
     "Employer commands:\n"
@@ -24,58 +26,18 @@ _HELP = (
 )
 
 
-async def _store(context: ContextTypes.DEFAULT_TYPE) -> Store | None:
-    return cast(Store | None, context.bot_data.get("store"))
-
-
 async def employer_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     assert update.effective_chat is not None
     await update.effective_chat.send_message(_HELP)
 
 
-async def _user_id(update: Update) -> int:
-    user = update.effective_user
-    assert user is not None
-    return user.id
-
-
-async def _require_employer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    store = await _store(context)
-    if store is None:
-        return False
-    account = await store.users.get(await _user_id(update))
-    if account is None or not account.is_employer:
-        assert update.effective_chat is not None
-        await update.effective_chat.send_message(
-            "You need the Employer role. Send /start and pick Employer."
-        )
-        return False
-    return True
-
-
-async def _require_company(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> Company | None:
-    store = await _store(context)
-    if store is None:
-        return None
-    uid = await _user_id(update)
-    company = await store.companies.find_by_member(uid)
-    if company is None:
-        assert update.effective_chat is not None
-        await update.effective_chat.send_message(
-            "You are not part of any company. Use /company <name> to create one."
-        )
-    return company
-
-
 async def _require_owner(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> Company | None:
-    store = await _store(context)
+    store = get_store(context)
     if store is None:
         return None
-    uid = await _user_id(update)
+    uid = user_id(update)
     company = await store.companies.find_by_owner(uid)
     if company is None:
         assert update.effective_chat is not None
@@ -87,7 +49,7 @@ async def _require_owner(
 
 async def company(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     assert update.effective_chat is not None
-    store = await _store(context)
+    store = get_store(context)
     if store is None:
         await update.effective_chat.send_message("Store unavailable.")
         return
@@ -96,7 +58,7 @@ async def company(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     name = " ".join(args).strip()
 
     if not name:
-        current = await store.companies.find_by_owner(await _user_id(update))
+        current = await store.companies.find_by_owner(user_id(update))
         if current is None:
             await update.effective_chat.send_message(
                 "You don't have a company yet. Use /company <name> to create one."
@@ -105,7 +67,7 @@ async def company(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await _render_company(update, current, store)
         return
 
-    uid = await _user_id(update)
+    uid = user_id(update)
     existing = await store.companies.find_by_owner(uid)
     if existing is not None:
         await update.effective_chat.send_message(
@@ -137,7 +99,7 @@ async def add_recruiter(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.effective_chat.send_message("That doesn't look like a user id.")
         return
 
-    store = await _store(context)
+    store = get_store(context)
     assert store is not None
     target = await store.users.get(recruiter_id)
     if target is None or not target.is_employer:
@@ -155,9 +117,9 @@ async def add_recruiter(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def new_job(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     assert update.effective_chat is not None
-    if not await _require_employer(update, context):
+    if not await require_employer(update, context):
         return
-    company = await _require_company(update, context)
+    company = await require_company(update, context)
     if company is None:
         return
     args = context.args or []
@@ -171,7 +133,7 @@ async def new_job(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
 
-    store = await _store(context)
+    store = get_store(context)
     assert store is not None
     job_id = uuid4().hex[:8]
     job = Job(
@@ -180,7 +142,7 @@ async def new_job(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         title=title,
         description="",
         requirements="",
-        created_by=await _user_id(update),
+        created_by=user_id(update),
     )
     await store.jobs.save(job)
     await update.effective_chat.send_message(
@@ -194,7 +156,7 @@ async def _company_job(
 ) -> Job | None:
     """Resolve the job a company member is acting on, messaging on failure."""
     assert update.effective_chat is not None
-    company = await _require_company(update, context)
+    company = await require_company(update, context)
     if company is None:
         return None
     args = context.args or []
@@ -205,7 +167,7 @@ async def _company_job(
         )
         return None
     job_id = args[0]
-    store = await _store(context)
+    store = get_store(context)
     assert store is not None
     job = await store.jobs.get(job_id)
     if job is None or job.company_id != company.id:
@@ -220,7 +182,7 @@ async def set_description(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if job is None:
         return
     job.description = " ".join((context.args or [])[1:]).strip()
-    store = await _store(context)
+    store = get_store(context)
     assert store is not None
     await store.jobs.save(job)
     await update.effective_chat.send_message(f"Description saved for job `{job.id}`.")
@@ -232,7 +194,7 @@ async def set_requirements(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if job is None:
         return
     job.requirements = " ".join((context.args or [])[1:]).strip()
-    store = await _store(context)
+    store = get_store(context)
     assert store is not None
     await store.jobs.save(job)
     await update.effective_chat.send_message(f"Requirements saved for job `{job.id}`.")
@@ -253,7 +215,7 @@ async def _apply_job_transition(
     except JobError as exc:
         await update.effective_chat.send_message(f"Cannot {verb}: {exc}")
         return
-    store = await _store(context)
+    store = get_store(context)
     assert store is not None
     await store.jobs.save(job)
     await update.effective_chat.send_message(
@@ -275,10 +237,10 @@ async def archive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def my_jobs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     assert update.effective_chat is not None
-    company = await _require_company(update, context)
+    company = await require_company(update, context)
     if company is None:
         return
-    store = await _store(context)
+    store = get_store(context)
     assert store is not None
     jobs = await store.jobs.list_by_company(company.id)
     if not jobs:

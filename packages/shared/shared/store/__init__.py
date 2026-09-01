@@ -6,8 +6,13 @@ live in the `domain` package, so the shells only map to/from domain objects.
 
 from dataclasses import dataclass
 
+from .applications import (
+    ApplicationRepository,
+    RedisApplicationRepository,
+)
 from .companies import CompanyRepository, RedisCompanyRepository
 from .jobs import JobRepository, RedisJobRepository
+from .profiles import RedisSeekerProfileRepository, SeekerProfileRepository
 from .users import RedisUserRepository, UserRepository
 
 
@@ -18,6 +23,8 @@ class Store:
     users: UserRepository
     companies: CompanyRepository
     jobs: JobRepository
+    profiles: SeekerProfileRepository
+    applications: ApplicationRepository
 
 
 __all__ = [
@@ -28,4 +35,8 @@ __all__ = [
     "RedisCompanyRepository",
     "JobRepository",
     "RedisJobRepository",
+    "SeekerProfileRepository",
+    "RedisSeekerProfileRepository",
+    "ApplicationRepository",
+    "RedisApplicationRepository",
 ]
