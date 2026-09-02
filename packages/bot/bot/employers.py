@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Callable
 from uuid import uuid4
 
-from domain.company import Company
+from domain.company import Company, CompanyError
 from domain.job import Job, JobError
 from shared.store import Store
 from telegram import Update
@@ -72,17 +72,20 @@ async def company(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     uid = user_id(update)
-    existing = await store.companies.find_by_owner(uid)
-    if existing is not None:
-        await update.effective_chat.send_message(
-            f"You already own **{existing.name}**. An employer holds one company."
-        )
-        return
-
     company_id = uuid4().hex[:8]
     new_company = Company(id=company_id, name=name)
     new_company.set_owner(uid)
-    await store.companies.save(new_company)
+    try:
+        await store.companies.save(new_company)
+    except CompanyError as exc:
+        existing = await store.companies.find_by_owner(uid)
+        if existing is not None and existing.id != company_id:
+            await update.effective_chat.send_message(
+                f"You already own **{existing.name}**. {exc}"
+            )
+            return
+        await update.effective_chat.send_message(str(exc))
+        return
     await update.effective_chat.send_message(
         f"🏢 **{name}** created. You are now its **Owner**."
     )

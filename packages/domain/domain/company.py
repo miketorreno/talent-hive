@@ -17,6 +17,15 @@ class CompanyError(DomainError):
     """Raised when a company operation violates a domain rule."""
 
 
+ONE_COMPANY_PER_OWNER = "an employer can hold exactly one company"
+
+
+def raise_one_company_per_owner_when(already_owns: bool) -> None:
+    """Raise the canonical one-company error when ``already_owns`` is true."""
+    if already_owns:
+        raise CompanyError(ONE_COMPANY_PER_OWNER)
+
+
 @dataclass
 class Company:
     """An organization that offers jobs.
@@ -108,8 +117,9 @@ class CompanyRegistry:
 
     def _enforce_one_company_per_owner(self, owner_id: int, company_id: str) -> None:
         existing_id = self._owner_to_company.get(owner_id)
-        if existing_id is not None and existing_id != company_id:
-            raise CompanyError("an employer can hold exactly one company")
+        raise_one_company_per_owner_when(
+            existing_id is not None and existing_id != company_id
+        )
 
     def _require(self, company_id: str) -> Company:
         company = self._companies.get(company_id)

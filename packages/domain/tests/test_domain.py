@@ -1,7 +1,14 @@
 import pytest
 from domain.application import Application, ApplicationError, ApplicationStatus
 from domain.artifact import Artifact, ArtifactError, ArtifactOrigin, ArtifactType
-from domain.company import Company, CompanyError, CompanyRegistry, EmployerRole
+from domain.company import (
+    ONE_COMPANY_PER_OWNER,
+    Company,
+    CompanyError,
+    CompanyRegistry,
+    EmployerRole,
+    raise_one_company_per_owner_when,
+)
 from domain.identities import Role, RoleError, User
 from domain.job import Job, JobError, JobStatus
 from domain.profile import ProfileError, SeekerProfile
@@ -308,8 +315,13 @@ class TestCompanyRegistry:
     def test_same_owner_cannot_start_second_company(self):
         registry = CompanyRegistry()
         registry.add_company(self._company("c1", owner_id=7))
-        with pytest.raises(CompanyError):
+        with pytest.raises(CompanyError, match=ONE_COMPANY_PER_OWNER):
             registry.add_company(self._company("c2", owner_id=7))
+
+    def test_raise_one_company_per_owner_when(self):
+        raise_one_company_per_owner_when(False)
+        with pytest.raises(CompanyError, match=ONE_COMPANY_PER_OWNER):
+            raise_one_company_per_owner_when(True)
 
     def test_distinct_owners_may_each_have_a_company(self):
         registry = CompanyRegistry()
@@ -339,7 +351,7 @@ class TestCompanyRegistry:
         registry = CompanyRegistry()
         registry.add_company(self._company("c1", owner_id=7))
         registry.add_company(self._company("c2", owner_id=None))
-        with pytest.raises(CompanyError):
+        with pytest.raises(CompanyError, match=ONE_COMPANY_PER_OWNER):
             registry.set_owner("c2", 7)
 
     def test_set_owner_unknown_company_rejected(self):

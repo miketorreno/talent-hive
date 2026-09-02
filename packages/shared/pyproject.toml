@@ -6,6 +6,7 @@ authors = ["Mike Torreno"]
 
 [tool.poetry.dependencies]
 python = "^3.12"
+domain = { path = "../domain", develop = true }
 pydantic = "^2.6"
 pydantic-settings = "^2.2"
 redis = "^5.0"
