@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars and fill in your values.
+
+project     = "talent-hive"
+environment = "dev"
+aws_region  = "eu-west-2"
+
+# Docker images (push to ECR or another registry before applying)
+bot_image    = "123456789012.dkr.ecr.eu-west-2.amazonaws.com/talent-hive-bot:latest"
+worker_image = "123456789012.dkr.ecr.eu-west-2.amazonaws.com/talent-hive-worker:latest"
+
+# Secrets
+telegram_token  = ""
+groq_api_key    = ""
+google_ai_api_key = ""
+
+# Optional overrides
+# ecs_instance_type  = "t3.small"
+# rds_instance_class = "db.t3.micro"
+# redis_node_type    = "cache.t3.micro"
