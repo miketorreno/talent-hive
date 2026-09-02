@@ -17,6 +17,7 @@ RUNTIME_DEPS = [
     "pydantic",
     "pydantic-settings",
     "redis",
+    "asyncpg",
     "httpx",
     "python-telegram-bot",
     "arq",
