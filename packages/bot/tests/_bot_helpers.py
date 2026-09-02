@@ -57,9 +57,12 @@ class FakeChat:
     def __init__(self) -> None:
         self.messages: list[str] = []
         self.documents: list[str] = []
+        self.last_reply_markup: object | None = None
 
-    async def send_message(self, text: str, **_: object) -> None:
+    async def send_message(self, text: str, **kwargs: object) -> None:
         self.messages.append(text)
+        if "reply_markup" in kwargs:
+            self.last_reply_markup = kwargs["reply_markup"]
 
     async def send_document(self, document: str, **_: object) -> None:
         self.documents.append(document)
@@ -80,13 +83,29 @@ class FakeMessage:
         self.document = document
 
 
+class FakeCallbackQuery:
+    def __init__(self, data: str) -> None:
+        self.data = data
+        self.edited: list[str] = []
+        self.answered = False
+
+    async def answer(self) -> None:
+        self.answered = True
+
+    async def edit_message_text(self, text: str, **_: object) -> None:
+        self.edited.append(text)
+
+
 class FakeUpdate:
     def __init__(
-        self, user_id: int, document: FakeDocument | None = None
+        self,
+        user_id: int,
+        document: FakeDocument | None = None,
+        callback_query: FakeCallbackQuery | None = None,
     ) -> None:
         self.effective_user = FakeUser(user_id)
         self.effective_chat = FakeChat()
-        self.callback_query = None
+        self.callback_query = callback_query
         self.message = FakeMessage(document)
 
 
