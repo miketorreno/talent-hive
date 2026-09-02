@@ -39,6 +39,10 @@ _Avoid_: Document, file
 **Seeker Profile**:
 The job seeker's stored skills, experience, and background, used as the template base for generating artifacts.
 
+**Refinement Goals**:
+The specific aspects an employer asks the AI to focus on when refining a job description: clarity, inclusivity, and skills emphasis, plus a length target (shorter / keep / longer).
+_Avoid_: Tone, style options
+
 ## AI Artifact Origins
 
 - **ai_generated**: produced by an LLM provider
