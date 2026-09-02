@@ -3,6 +3,7 @@ import builtins
 from domain.identities import Role, User
 from shared.store import (
     RedisApplicationRepository,
+    RedisArtifactRepository,
     RedisCompanyRepository,
     RedisJobRepository,
     RedisSeekerProfileRepository,
@@ -55,9 +56,13 @@ class FakeRedis:
 class FakeChat:
     def __init__(self) -> None:
         self.messages: list[str] = []
+        self.documents: list[str] = []
 
     async def send_message(self, text: str, **_: object) -> None:
         self.messages.append(text)
+
+    async def send_document(self, document: str, **_: object) -> None:
+        self.documents.append(document)
 
 
 class FakeUser:
@@ -65,16 +70,51 @@ class FakeUser:
         self.id = user_id
 
 
+class FakeDocument:
+    def __init__(self, file_id: str) -> None:
+        self.file_id = file_id
+
+
+class FakeMessage:
+    def __init__(self, document: FakeDocument | None = None) -> None:
+        self.document = document
+
+
 class FakeUpdate:
-    def __init__(self, user_id: int) -> None:
+    def __init__(
+        self, user_id: int, document: FakeDocument | None = None
+    ) -> None:
         self.effective_user = FakeUser(user_id)
         self.effective_chat = FakeChat()
         self.callback_query = None
+        self.message = FakeMessage(document)
+
+
+class FakeArq:
+    """In-memory stand-in for the arq pool used by the bot to enqueue jobs."""
+
+    def __init__(self) -> None:
+        self.jobs: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
+
+    async def enqueue_job(
+        self,
+        name: str,
+        *args: object,
+        **kwargs: object,
+    ) -> None:
+        self.jobs.append((name, args, kwargs))
 
 
 class FakeContext:
-    def __init__(self, store: Store, args: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        store: Store,
+        args: list[str] | None = None,
+        arq: FakeArq | None = None,
+    ) -> None:
         self.bot_data: dict[str, object] = {"store": store}
+        if arq is not None:
+            self.bot_data["arq"] = arq
         self.args = args or []
 
 
@@ -86,6 +126,7 @@ def make_store() -> Store:
         jobs=RedisJobRepository(redis),  # type: ignore[arg-type]
         profiles=RedisSeekerProfileRepository(redis),  # type: ignore[arg-type]
         applications=RedisApplicationRepository(redis),  # type: ignore[arg-type]
+        artifacts=RedisArtifactRepository(redis),  # type: ignore[arg-type]
     )
 
 

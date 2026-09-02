@@ -3,19 +3,21 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from redis import asyncio as aioredis
+from arq.connections import RedisSettings, create_pool
 from shared.config import get_settings
-from shared.store import (
-    RedisApplicationRepository,
-    RedisCompanyRepository,
-    RedisJobRepository,
-    RedisSeekerProfileRepository,
-    RedisUserRepository,
-    Store,
-)
+from shared.store import build_store
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler
 
 from .applications import accept, applications, reject, review, shortlist
+from .artifacts import (
+    artifact,
+    artifacts,
+    coverletter,
+    refinejd,
+    resume,
+    upload,
+    write,
+)
 from .employers import (
     add_recruiter,
     archive,
@@ -45,14 +47,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 def build_application(token: str, redis_url: str) -> Application:
-    redis = aioredis.from_url(redis_url, decode_responses=False)
-    store = Store(
-        users=RedisUserRepository(redis),
-        companies=RedisCompanyRepository(redis),
-        jobs=RedisJobRepository(redis),
-        profiles=RedisSeekerProfileRepository(redis),
-        applications=RedisApplicationRepository(redis),
-    )
+    store = build_store(redis_url)
 
     app = Application.builder().token(token).build()
     app.bot_data["store"] = store
@@ -82,6 +77,13 @@ def build_application(token: str, redis_url: str) -> Application:
     app.add_handler(CommandHandler("myapps", my_applications))
     app.add_handler(CommandHandler("withdraw", withdraw))
     app.add_handler(CommandHandler("seeker", seeker_help))
+    app.add_handler(CommandHandler("coverletter", coverletter))
+    app.add_handler(CommandHandler("resume", resume))
+    app.add_handler(CommandHandler("refinejd", refinejd))
+    app.add_handler(CommandHandler("artifacts", artifacts))
+    app.add_handler(CommandHandler("artifact", artifact))
+    app.add_handler(CommandHandler("write", write))
+    app.add_handler(CommandHandler("upload", upload))
     return app
 
 
@@ -90,6 +92,8 @@ async def main() -> None:
     if not settings.telegram_token:
         raise SystemExit("TH_TELEGRAM_TOKEN is not set")
     app = build_application(settings.telegram_token, settings.redis_url)
+    pool = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+    app.bot_data["arq"] = pool
     await app.initialize()
     await app.start()
     assert app.updater is not None

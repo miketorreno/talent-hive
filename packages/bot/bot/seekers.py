@@ -19,7 +19,12 @@ _HELP = (
     "/jobs — browse published jobs\n"
     "/apply <job_id> — apply to a published job\n"
     "/myapps — list your applications\n"
-    "/withdraw <application_id> — withdraw an application"
+    "/withdraw <application_id> — withdraw an application\n"
+    "/coverletter <job_id> — AI-generate a cover letter for a job\n"
+    "/resume [job_id] — AI-generate a resume, optionally tailored to a job\n"
+    "/artifact <id> / /artifacts — revisit your artifacts\n"
+    "/write <type> <text> — save an artifact you wrote\n"
+    "/upload <type> + document — store an artifact file"
 )
 
 

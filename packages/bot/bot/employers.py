@@ -22,7 +22,11 @@ _HELP = (
     "/publish <job_id> — publish a job\n"
     "/close <job_id> — close a job\n"
     "/archive <job_id> — archive a closed job\n"
-    "/myjobs — list your company's jobs"
+    "/myjobs — list your company's jobs\n"
+    "/refinejd <job_id> — AI-generate a job description\n"
+    "/artifact <id> / /artifacts — revisit your artifacts\n"
+    "/write <type> <text> — save an artifact you wrote\n"
+    "/upload <type> + document — store an artifact file"
 )
 
 

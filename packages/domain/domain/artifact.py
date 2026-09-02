@@ -37,6 +37,7 @@ class Artifact:
     storage key referencing an S3 object.
     """
 
+    id: str
     type: ArtifactType
     owner_id: int
     origin: ArtifactOrigin

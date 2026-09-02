@@ -172,37 +172,81 @@ class TestApplicationStateMachine:
 class TestArtifact:
     def test_ai_generated_needs_text(self):
         with pytest.raises(ArtifactError):
-            Artifact(ArtifactType.COVER_LETTER, 1, ArtifactOrigin.AI_GENERATED)
+            Artifact(
+                id="a1",
+                type=ArtifactType.COVER_LETTER,
+                owner_id=1,
+                origin=ArtifactOrigin.AI_GENERATED,
+            )
 
     def test_user_uploaded_needs_storage_key(self):
         with pytest.raises(ArtifactError):
-            Artifact(ArtifactType.RESUME, 1, ArtifactOrigin.USER_UPLOADED)
+            Artifact(
+                id="a1",
+                type=ArtifactType.RESUME,
+                owner_id=1,
+                origin=ArtifactOrigin.USER_UPLOADED,
+            )
 
     def test_user_written_needs_text(self):
         with pytest.raises(ArtifactError):
-            Artifact(ArtifactType.RESUME, 1, ArtifactOrigin.USER_WRITTEN)
+            Artifact(
+                id="a1",
+                type=ArtifactType.RESUME,
+                owner_id=1,
+                origin=ArtifactOrigin.USER_WRITTEN,
+            )
 
     def test_uploaded_artifact_accepts_key(self):
-        a = Artifact(ArtifactType.RESUME, 1, ArtifactOrigin.USER_UPLOADED, storage_key="s3://x")
+        a = Artifact(
+            id="a1",
+            type=ArtifactType.RESUME,
+            owner_id=1,
+            origin=ArtifactOrigin.USER_UPLOADED,
+            storage_key="s3://x",
+        )
         assert a.storage_key == "s3://x"
 
     def test_storage_key_forbidden_for_written(self):
         with pytest.raises(ArtifactError):
             Artifact(
-                ArtifactType.JOB_DESCRIPTION,
-                1,
-                ArtifactOrigin.USER_WRITTEN,
+                id="a1",
+                type=ArtifactType.JOB_DESCRIPTION,
+                owner_id=1,
+                origin=ArtifactOrigin.USER_WRITTEN,
                 text="t",
                 storage_key="k",
             )
 
     def test_written_artifact_ok(self):
-        a = Artifact(ArtifactType.JOB_DESCRIPTION, 1, ArtifactOrigin.USER_WRITTEN, text="hello")
+        a = Artifact(
+            id="a1",
+            type=ArtifactType.JOB_DESCRIPTION,
+            owner_id=1,
+            origin=ArtifactOrigin.USER_WRITTEN,
+            text="hello",
+        )
         assert a.text == "hello"
 
     def test_invalid_type_rejected(self):
         with pytest.raises(ArtifactError):
-            Artifact("nonsense", 1, ArtifactOrigin.AI_GENERATED, text="t")  # type: ignore[arg-type]
+            Artifact(
+                id="a1",
+                type="nonsense",  # type: ignore[arg-type]
+                owner_id=1,
+                origin=ArtifactOrigin.AI_GENERATED,
+                text="t",
+            )
+
+    def test_carries_id(self):
+        a = Artifact(
+            id="a1",
+            type=ArtifactType.RESUME,
+            owner_id=1,
+            origin=ArtifactOrigin.USER_WRITTEN,
+            text="hello",
+        )
+        assert a.id == "a1"
 
 
 class TestCompany:
