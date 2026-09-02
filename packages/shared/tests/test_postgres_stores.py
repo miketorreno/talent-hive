@@ -151,6 +151,48 @@ async def test_list_published(pg_store: PostgresStore) -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_published_matches_title(pg_store: PostgresStore) -> None:
+    await pg_store.companies.save(Company(id="c1", name="Acme", owner_id=1))
+    await pg_store.jobs.save(_job("j1", "c1", "Backend Engineer", publish=True))
+    await pg_store.jobs.save(_job("j2", "c1", "Frontend Designer", publish=True))
+    matches = await pg_store.jobs.search_published("backend")
+    assert {j.id for j in matches} == {"j1"}
+
+
+@pytest.mark.asyncio
+async def test_search_published_is_case_insensitive(pg_store: PostgresStore) -> None:
+    await pg_store.companies.save(Company(id="c1", name="Acme", owner_id=1))
+    await pg_store.jobs.save(_job("j1", "c1", "Backend Engineer", publish=True))
+    matches = await pg_store.jobs.search_published("BACKEND")
+    assert {j.id for j in matches} == {"j1"}
+
+
+@pytest.mark.asyncio
+async def test_search_published_requires_all_terms(pg_store: PostgresStore) -> None:
+    await pg_store.companies.save(Company(id="c1", name="Acme", owner_id=1))
+    await pg_store.jobs.save(_job("j1", "c1", "Backend Engineer", publish=True))
+    await pg_store.jobs.save(_job("j2", "c1", "Backend Designer", publish=True))
+    matches = await pg_store.jobs.search_published("backend engineer")
+    assert {j.id for j in matches} == {"j1"}
+
+
+@pytest.mark.asyncio
+async def test_search_published_ignores_unpublished(pg_store: PostgresStore) -> None:
+    await pg_store.companies.save(Company(id="c1", name="Acme", owner_id=1))
+    await pg_store.jobs.save(_job("j1", "c1", "Backend Engineer", publish=True))
+    await pg_store.jobs.save(_job("j2", "c1", "Backend Ghost"))
+    matches = await pg_store.jobs.search_published("backend")
+    assert {j.id for j in matches} == {"j1"}
+
+
+@pytest.mark.asyncio
+async def test_search_published_no_match(pg_store: PostgresStore) -> None:
+    await pg_store.companies.save(Company(id="c1", name="Acme", owner_id=1))
+    await pg_store.jobs.save(_job("j1", "c1", "Backend Engineer", publish=True))
+    assert await pg_store.jobs.search_published("rust") == []
+
+
+@pytest.mark.asyncio
 async def test_unknown_profile_is_none(pg_store: PostgresStore) -> None:
     assert await pg_store.profiles.get(999) is None
 

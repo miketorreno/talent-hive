@@ -8,7 +8,7 @@ from domain.application import Application, ApplicationStatus
 from domain.artifact import Artifact, ArtifactOrigin, ArtifactType
 from domain.company import Company, raise_one_company_per_owner_when
 from domain.identities import Role, User
-from domain.job import Job, JobStatus
+from domain.job import Job, JobStatus, search_terms
 from domain.profile import SeekerProfile
 
 from shared.store.applications import ApplicationRepository
@@ -241,6 +241,23 @@ class PostgresJobRepository(JobRepository):
         )
         return [_decode_job_row(row) for row in rows]
 
+    async def search_published(self, query: str) -> list[Job]:
+        terms = search_terms(query)
+        if not terms:
+            return []
+        conditions = " AND ".join(
+            "(title ILIKE $%d OR description ILIKE $%d OR requirements ILIKE $%d)"
+            % (i, i, i)
+            for i in range(1, len(terms) + 1)
+        )
+        params = [f"%{_escape_like(term)}%" for term in terms]
+        sql = (
+            "SELECT * FROM jobs WHERE status = 'published' AND "
+            f"({conditions}) ORDER BY created_at"
+        )
+        rows = await self._conn.fetch(sql, *params)
+        return [_decode_job_row(row) for row in rows]
+
     async def save(self, job: Job) -> None:
         await self._conn.execute(
             """
@@ -417,6 +434,16 @@ class PostgresArtifactRepository(ArtifactRepository):
             artifact.storage_key,
             artifact.created_at,
         )
+
+
+def _escape_like(term: str) -> str:
+    """Escape LIKE wildcards so a search term matches literally (ILIKE parity).
+
+    Postgres default LIKE escape character is the backslash; without escaping a
+    user-supplied '%' or '_' would act as a wildcard, unlike the Redis backend's
+    literal substring match. A literal backslash is doubled so it survives as-is.
+    """
+    return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def _decode_job_row(row: asyncpg.Record) -> Job:

@@ -34,6 +34,19 @@ _TRANSITIONS: dict[JobStatus, frozenset[JobStatus]] = {
 # A job may only be published if it is complete enough to be browsed.
 _REQUIRED_FOR_PUBLISH = ("title", "description", "requirements")
 
+# Fields a free-text search can match on.
+_SEARCHABLE_FIELDS = ("title", "description", "requirements")
+
+
+def search_terms(query: str) -> tuple[str, ...]:
+    """Split a free-text query into lowercase terms to match against a Job.
+
+    A Job matches when every returned term appears somewhere in its title,
+    description, or requirements. Empty and whitespace-only queries yield no
+    terms and therefore match nothing.
+    """
+    return tuple(term for term in query.lower().split() if term)
+
 
 @dataclass
 class Job:
@@ -84,3 +97,13 @@ class Job:
     @property
     def is_active(self) -> bool:
         return self.status == JobStatus.PUBLISHED
+
+    def matches(self, query: str) -> bool:
+        """True when the Job matches every search term in the query."""
+        terms = search_terms(query)
+        if not terms:
+            return False
+        haystack = " ".join(
+            getattr(self, field) for field in _SEARCHABLE_FIELDS
+        ).lower()
+        return all(term in haystack for term in terms)

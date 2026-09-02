@@ -17,6 +17,7 @@ _HELP = (
     "/addexperience <text> — add an experience entry\n"
     "/background <text> — set your background\n"
     "/jobs — browse published jobs\n"
+    "/search <query> — search published jobs\n"
     "/apply <job_id> — apply to a published job\n"
     "/myapps — list your applications\n"
     "/withdraw <application_id> — withdraw an application\n"
@@ -150,6 +151,30 @@ async def jobs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ordered = sorted(published, key=lambda job: job.created_at)
     await update.effective_chat.send_message(
         "**Published jobs:**\n\n" + "\n\n".join(_format_job(job) for job in ordered)
+    )
+
+
+async def search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    assert update.effective_chat is not None
+    if not await require_seeker(update, context):
+        return
+    args = context.args or []
+    query = " ".join(args).strip()
+    if not query:
+        await update.effective_chat.send_message("Usage: /search <query>")
+        return
+    store = get_store(context)
+    assert store is not None
+    matches = await store.jobs.search_published(query)
+    if not matches:
+        await update.effective_chat.send_message(
+            f"No published jobs match **{query}**."
+        )
+        return
+    ordered = sorted(matches, key=lambda job: job.created_at)
+    await update.effective_chat.send_message(
+        f"**Results for '{query}':**\n\n"
+        + "\n\n".join(_format_job(job) for job in ordered)
     )
 
 

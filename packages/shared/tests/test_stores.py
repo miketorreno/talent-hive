@@ -243,3 +243,68 @@ async def test_delete_job(job_repo: JobRepository) -> None:
     await job_repo.delete("j1")
     assert await job_repo.get("j1") is None
     assert await job_repo.list_by_company("c1") == []
+
+
+def _published_job(job_id: str, title: str, description: str = "d") -> Job:
+    job = Job(id=job_id, company_id="c1", title=title, description=description, requirements="r")
+    job.publish()
+    return job
+
+
+@pytest.mark.asyncio
+async def test_search_published_matches_title(job_repo: JobRepository) -> None:
+    await job_repo.save(_published_job("j1", "Backend Engineer"))
+    await job_repo.save(_published_job("j2", "Frontend Designer"))
+    matches = await job_repo.search_published("backend")
+    assert {j.id for j in matches} == {"j1"}
+
+
+@pytest.mark.asyncio
+async def test_search_published_matches_description(job_repo: JobRepository) -> None:
+    await job_repo.save(_published_job("j1", "Engineer", description="Build Python services"))
+    matches = await job_repo.search_published("python")
+    assert {j.id for j in matches} == {"j1"}
+
+
+@pytest.mark.asyncio
+async def test_search_published_matches_requirements(job_repo: JobRepository) -> None:
+    job = Job(id="j1", company_id="c1", title="Engineer", description="d", requirements="SQL, Go")
+    job.publish()
+    await job_repo.save(job)
+    matches = await job_repo.search_published("sql")
+    assert {j.id for j in matches} == {"j1"}
+
+
+@pytest.mark.asyncio
+async def test_search_published_is_case_insensitive(job_repo: JobRepository) -> None:
+    await job_repo.save(_published_job("j1", "Backend Engineer"))
+    assert {j.id for j in await job_repo.search_published("BACKEND")} == {"j1"}
+    assert {j.id for j in await job_repo.search_published("BackEnd")} == {"j1"}
+
+
+@pytest.mark.asyncio
+async def test_search_published_requires_all_terms(job_repo: JobRepository) -> None:
+    await job_repo.save(_published_job("j1", "Backend Engineer"))
+    await job_repo.save(_published_job("j2", "Backend Designer"))
+    matches = await job_repo.search_published("backend engineer")
+    assert {j.id for j in matches} == {"j1"}
+
+
+@pytest.mark.asyncio
+async def test_search_published_ignores_unpublished_jobs(job_repo: JobRepository) -> None:
+    await job_repo.save(_published_job("j1", "Backend Engineer"))
+    await job_repo.save(Job(id="j2", company_id="c1", title="Backend Ghost", description="d"))
+    matches = await job_repo.search_published("backend")
+    assert {j.id for j in matches} == {"j1"}
+
+
+@pytest.mark.asyncio
+async def test_search_published_no_match(job_repo: JobRepository) -> None:
+    await job_repo.save(_published_job("j1", "Backend Engineer"))
+    assert await job_repo.search_published("rust") == []
+
+
+@pytest.mark.asyncio
+async def test_search_published_empty_query(job_repo: JobRepository) -> None:
+    await job_repo.save(_published_job("j1", "Backend Engineer"))
+    assert await job_repo.search_published("   ") == []

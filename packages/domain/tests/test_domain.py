@@ -10,7 +10,7 @@ from domain.company import (
     raise_one_company_per_owner_when,
 )
 from domain.identities import Role, RoleError, User
-from domain.job import Job, JobError, JobStatus
+from domain.job import Job, JobError, JobStatus, search_terms
 from domain.profile import ProfileError, SeekerProfile
 
 
@@ -103,6 +103,47 @@ class TestJobStateMachine:
         assert not job.is_active
         job.publish()
         assert job.is_active
+
+
+class TestJobSearch:
+    def _job(self, title="Engineer", description="Build things", requirements="Python"):
+        return Job(
+            id="j1",
+            company_id="c1",
+            title=title,
+            description=description,
+            requirements=requirements,
+        )
+
+    def test_matches_single_term_in_title(self):
+        assert self._job(title="Backend Engineer").matches("backend")
+
+    def test_matches_term_in_description(self):
+        assert self._job(description="Build Python services").matches("python")
+
+    def test_matches_term_in_requirements(self):
+        assert self._job(requirements="SQL, Go").matches("sql")
+
+    def test_matches_is_case_insensitive(self):
+        job = self._job(title="Backend Engineer")
+        assert job.matches("BACKEND")
+        assert job.matches("BackEnd")
+
+    def test_matches_requires_every_term(self):
+        job = self._job(title="Backend Engineer")
+        assert job.matches("backend engineer")
+        assert not job.matches("backend designer")
+
+    def test_matches_miss_returns_false(self):
+        assert not self._job().matches("rust")
+
+    def test_matches_empty_query_returns_false(self):
+        assert not self._job().matches("")
+        assert not self._job().matches("   ")
+
+    def test_search_terms_lowercases_and_splits(self):
+        assert search_terms("Back  End Partner") == ("back", "end", "partner")
+        assert search_terms("   ") == ()
 
 
 class TestApplicationStateMachine:

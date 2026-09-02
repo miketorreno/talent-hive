@@ -10,6 +10,7 @@ from bot.seekers import (
     jobs,
     my_applications,
     profile,
+    search,
     withdraw,
 )
 
@@ -84,6 +85,54 @@ async def test_browse_published_jobs_lists_only_published() -> None:
     message = update.effective_chat.messages[-1]
     assert job_id in message
     assert "Engineer" in message
+
+
+@pytest.mark.asyncio
+async def test_search_finds_published_job() -> None:
+    store = make_store()
+    job_id = await _publish_job(store, 1, "Backend Engineer")
+    await register_seeker(store, 7)
+
+    update = FakeUpdate(7)
+    await search(update, FakeContext(store, ["backend"]))  # type: ignore[arg-type]
+
+    message = update.effective_chat.messages[-1]
+    assert job_id in message
+    assert "Backend Engineer" in message
+
+
+@pytest.mark.asyncio
+async def test_search_requires_seeker_role() -> None:
+    store = make_store()
+    await register_employer(store, 1)
+
+    update = FakeUpdate(1)
+    await search(update, FakeContext(store, ["backend"]))  # type: ignore[arg-type]
+
+    assert "Job Seeker role" in update.effective_chat.messages[-1]
+
+
+@pytest.mark.asyncio
+async def test_search_with_no_query_shows_usage() -> None:
+    store = make_store()
+    await register_seeker(store, 7)
+
+    update = FakeUpdate(7)
+    await search(update, FakeContext(store))  # type: ignore[arg-type]
+
+    assert "/search <query>" in update.effective_chat.messages[-1]
+
+
+@pytest.mark.asyncio
+async def test_search_no_match_message() -> None:
+    store = make_store()
+    await _publish_job(store, 1, "Backend Engineer")
+    await register_seeker(store, 7)
+
+    update = FakeUpdate(7)
+    await search(update, FakeContext(store, ["rust"]))  # type: ignore[arg-type]
+
+    assert "No published jobs match" in update.effective_chat.messages[-1]
 
 
 @pytest.mark.asyncio
