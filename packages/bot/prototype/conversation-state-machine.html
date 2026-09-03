@@ -187,6 +187,7 @@ const ConversationMachine = (() => {
 
     post_job: {
       title: 'Post a job',
+      seed(d, s) { d.company = s.company || null; },
       steps: [
         {
           id: 'title', kind: 'ask',
@@ -218,7 +219,7 @@ const ConversationMachine = (() => {
             { key: 'publish',   label: '✅ Publish now (live to seekers)' },
             { key: 'save_draft',label: '💾 Save as draft' },
           ],
-          prompt: (d) => `Here's the job so far:\n\n📄 **${d.title}**\n${d.description}\n\n${d.requirements}\n\nWhat next?`,
+          prompt: (d) => `Here's the job so far${d.company ? ' for **' + d.company + '**' : ''}:\n\n📄 **${d.title}**\n${d.description}\n\n${d.requirements}\n\nWhat next?`,
           next(v) {
             return { end: true,
               message: v === 'publish'
@@ -312,15 +313,13 @@ const ConversationMachine = (() => {
           id: 'resume', kind: 'menu',
           options: [
             { key: 'existing', label: 'Use my saved resume' },
-            { key: 'build',    label: 'Build one with Q&A' },
-            { key: 'none',     label: 'Skip — auto-gather from chat' },
+            { key: 'build',    label: 'Build one with Q&A (first time here)' },
           ],
           prompt: 'A cover letter needs your background. How do you want to supply it?',
           next(v, d) {
             if (v === 'build') return { step: 'resume_build', sub: 'resume' };
-            if (v === 'none') { d.resumeSource = 'chat-auto'; return { step: 'auto' }; }
             d.resumeSource = 'existing';
-            return { step: 'tone' };
+            return { step: 'preferences' };
           },
         },
         { /* nested resume Q&A lives here when 'build' chosen */
@@ -328,18 +327,10 @@ const ConversationMachine = (() => {
           prompt: 'OK — we\'ll need a few details. Same questions as building a resume.',
         },
         {
-          id: 'auto', kind: 'ask',
-          prompt: 'Tell me a bit about your background relevant to this role.',
-          help: 'a short paragraph is fine',
-          validate(v) { return v.trim() ? null : 'Give me something to work with.'; },
-          apply(d, v) { d.backgroundGathered = v.trim(); },
-          next() { return { step: 'tone' }; },
-        },
-        {
-          id: 'tone', kind: 'ask',
-          prompt: 'Any tone/preferences for the letter? (type "skip" for default)',
+          id: 'preferences', kind: 'ask',
+          prompt: 'Any preferences for the letter? (type "skip" for default)',
           help: 'e.g. "professional but warm, mention the fintech angle"',
-          apply(d, v) { d.tone = v.trim() === 'skip' ? '' : v.trim(); },
+          apply(d, v) { d.preferences = v.trim() === 'skip' ? '' : v.trim(); },
           next() { return { step: 'confirm' }; },
         },
         {
@@ -349,10 +340,10 @@ const ConversationMachine = (() => {
           ],
           prompt: (d) => 'Ready to generate a cover letter for **' + d.job + '**\n' +
             'Resume source: ' + (d.resumeSource || 'answered') + '\n' +
-            (d.tone ? 'Tone: ' + d.tone + '\n' : '') +
+            (d.preferences ? 'Preferences: ' + d.preferences + '\n' : '') +
             '\nGenerate?',
           next() {
-            return { end: true, message: '✍️ Generated\n\nDear Hiring Team,\n\n[ ...a cover letter drafted from your background, aimed at this job... ]\n\n— Your resume + tone were used.' };
+            return { end: true, message: '✍️ Generated\n\nDear Hiring Team,\n\n[ ...a cover letter drafted from your background, aimed at this job... ]\n\n— Your resume + preferences were used.' };
           },
         },
       ],
@@ -380,7 +371,7 @@ const ConversationMachine = (() => {
           okLabel: '✅ Done choosing goals',
           prompt: 'What should the AI focus on? (pick any, then Done)',
           apply(d, v) { (d.goals = d.goals || []).push(v); },
-          next(d) { return { step: 'length' }; },
+          next() { return { step: 'length' }; },
         },
         {
           id: 'length', kind: 'menu',
@@ -442,7 +433,7 @@ const ConversationMachine = (() => {
   }
 
   /* Resolve where a subflow's terminal hands control back to. */
-  const SUBFLOW_RETURN = { resume: 'tone' }; // coverletter's resume chooser → after the run, continue to tone
+  const SUBFLOW_RETURN = { resume: 'preferences' }; // coverletter's resume chooser → after the run, continue to preferences
 
   /* ---------- the reducer ---------- */
 
@@ -459,6 +450,7 @@ const ConversationMachine = (() => {
       if (!flow) return { session: s, error: 'Unknown flow.' };
       const first = flow.steps[0];
       s.active = { flow: action.flow, step: first.id, draft: {}, history: [first.id] };
+      if (flow.seed) flow.seed(s.active.draft, s);
       return { session: s, reply: text(stepDef(action.flow, first.id), s.active) };
     }
 
@@ -767,7 +759,7 @@ const SCENARIOS = [
   },
   {
     name: 'Cover letter (build resume inline)',
-    desc: 'A seeker writes a cover letter but has no resume, so the flow branches to build one inline via Q&A, then continues to tone and generation.',
+    desc: 'A seeker writes a cover letter but has no resume, so the flow branches to build one inline via Q&A, then continues to preferences and generation.',
     steps: [
       { label: 'Start "Cover letter"', action: { type: 'START', flow: 'coverletter' }, note: 'User taps "Cover letter"' },
       { label: 'Pick the job', action: { type: 'INPUT', value: SAMPLE_JOBS[0] }, note: 'User pastes job ' + SAMPLE_JOBS[0] },
@@ -779,7 +771,7 @@ const SCENARIOS = [
       { label: 'Resume: skills', action: { type: 'INPUT', value: 'Python, SQL' }, note: 'User types skills' },
       { label: 'Resume: skip projects', action: { type: 'INPUT', value: 'skip' }, note: 'User types "skip"' },
       { label: 'Resume: save', action: { type: 'CHOOSE', value: 'finish' }, note: 'User taps "Save my resume"' },
-      { label: 'Set tone', action: { type: 'INPUT', value: 'professional but warm, mention fintech' }, note: 'User types tone' },
+      { label: 'Set preferences', action: { type: 'INPUT', value: 'professional but warm, mention fintech' }, note: 'User types preferences' },
       { label: 'Generate the letter', action: { type: 'CHOOSE', value: 'generate' }, note: 'User taps "Generate"' },
     ],
   },
@@ -807,6 +799,20 @@ const SCENARIOS = [
       { label: 'Type a valid title', action: { type: 'INPUT', value: 'Data Analyst' }, note: 'User types a valid title' },
       { label: 'Type description', action: { type: 'INPUT', value: 'Analyze usage data and report.' }, note: 'User types description' },
       { label: 'Cancel the flow', action: { type: 'CANCEL' }, note: 'User taps ✖ Cancel' },
+    ],
+  },
+  {
+    name: 'Back out of an embedded resume (subflow)',
+    desc: 'Inside the cover-letter flow the bot asked to build a resume via Q&A. The seeker changes their mind mid-way, goes BACK out of the nested resume into the chooser, picks their existing resume instead, and finishes.',
+    steps: [
+      { label: 'Start "Cover letter"', action: { type: 'START', flow: 'coverletter' }, note: 'User taps "Cover letter"' },
+      { label: 'Pick the job', action: { type: 'INPUT', value: SAMPLE_JOBS[1] }, note: 'User pastes job ' + SAMPLE_JOBS[1] },
+      { label: 'Choose "Build one with Q&A"', action: { type: 'CHOOSE', value: 'build' }, note: 'User taps "Build one with Q&A"' },
+      { label: 'Resume: give contact', action: { type: 'INPUT', value: 'Alex Rivera ✉ alex@email.com' }, note: 'User types contact' },
+      { label: 'Go BACK out of the resume subflow', action: { type: 'BACK' }, note: 'User taps ⬅ Back (mid-resume)' },
+      { label: 'Choose "Use my saved resume"', action: { type: 'CHOOSE', value: 'existing' }, note: 'User taps "Use my saved resume"' },
+      { label: 'Set preferences', action: { type: 'INPUT', value: 'formal' }, note: 'User types preferences' },
+      { label: 'Generate the letter', action: { type: 'CHOOSE', value: 'generate' }, note: 'User taps "Generate"' },
     ],
   },
 ];
