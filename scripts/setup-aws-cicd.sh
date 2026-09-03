@@ -232,7 +232,11 @@ if command -v aws >/dev/null 2>&1 && [[ -n "$AWS_ACCESS_KEY_ID" ]]; then
   export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
   ask AWS_REGION "AWS region (default eu-west-2)"
   export AWS_DEFAULT_REGION="$AWS_REGION"
-  _bucket="talent-hive-tfstate-${AWS_ACCESS_KEY_ID:0:8}"
+  ask TF_BACKEND_BUCKET "S3 bucket name for tfstate (lowercase, globally unique; default talent-hive-tfstate)"
+  if [[ -z "$TF_BACKEND_BUCKET" ]]; then
+    TF_BACKEND_BUCKET="talent-hive-tfstate"
+  fi
+  _bucket="$TF_BACKEND_BUCKET"
   step "Creating S3 bucket \`${_bucket}\`..."
   aws s3api create-bucket --bucket "$_bucket" --region "$AWS_REGION" --create-bucket-configuration LocationConstraint="$AWS_REGION" >/dev/null 2>&1 || true
   aws s3api put-bucket-versioning --bucket "$_bucket" --versioning-configuration Status=Enabled >/dev/null 2>&1 || true
@@ -266,6 +270,11 @@ ask TF_BACKEND_KEY "State key path (default talent-hive/terraform.tfstate)"
 write_env AWS_REGION "$AWS_REGION"
 set_var AWS_REGION "$AWS_REGION"
 set_var TF_BACKEND_KEY "$TF_BACKEND_KEY"
+ask PROJECT "Resource/project name prefix (default talent-hive)"
+if [[ -z "$PROJECT" ]]; then
+  PROJECT="talent-hive"
+fi
+set_var PROJECT "$PROJECT"
 
 # ── Stage 5: Telegram bot token ---------------------------------------------
 stage "Telegram bot token"
@@ -308,7 +317,7 @@ if command -v terraform >/dev/null 2>&1; then
   note ">>> terraform init (backend)..."
   terraform init -backend-config="bucket=$TF_BACKEND_BUCKET" -backend-config="key=$TF_BACKEND_KEY" -backend-config="region=$AWS_REGION" -backend-config="dynamodb_table=$TF_BACKEND_LOCK_TABLE" -no-color 2>&1 | tail -n 5
   note ">>> terraform plan..."
-  terraform plan -input=false -no-color 2>&1 | tail -n 15
+  terraform plan -input=false -no-color -var="project=$PROJECT" -var="aws_region=$AWS_REGION" -var="telegram_token=$TELEGRAM_TOKEN" -var="groq_api_key=$GROQ_API_KEY" -var="google_ai_api_key=$GOOGLE_AI_API_KEY" 2>&1 | tail -n 15
   popd >/dev/null 2>&1 || true
 else
   say "terraform CLI not installed locally - skip this. The Deploy workflow will"

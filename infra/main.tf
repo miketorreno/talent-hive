@@ -50,7 +50,6 @@ module "ecr" {
   source = "./modules/ecr"
 
   project      = var.project
-  environment  = var.environment
   force_delete = var.ecr_force_delete
 }
 

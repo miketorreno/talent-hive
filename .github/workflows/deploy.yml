@@ -13,6 +13,7 @@ concurrency:
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION || 'eu-west-2' }}
+  PROJECT: ${{ vars.PROJECT || 'talent-hive' }}
   TF_BACKEND_BUCKET: ${{ vars.TF_BACKEND_BUCKET }}
   TF_BACKEND_LOCK_TABLE: ${{ vars.TF_BACKEND_LOCK_TABLE }}
   TF_BACKEND_KEY: ${{ vars.TF_BACKEND_KEY || 'talent-hive/terraform.tfstate' }}
@@ -42,7 +43,7 @@ jobs:
         id: build-bot
         env:
           ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-          ECR_REPOSITORY: talent-hive-bot
+          ECR_REPOSITORY: ${{ env.PROJECT }}-bot
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker build -f packages/bot/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
@@ -54,7 +55,7 @@ jobs:
         id: build-worker
         env:
           ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-          ECR_REPOSITORY: talent-hive-worker
+          ECR_REPOSITORY: ${{ env.PROJECT }}-worker
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker build -f packages/worker/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
@@ -77,5 +78,5 @@ jobs:
 
       - name: Terraform Apply
         id: apply
-        run: terraform apply -auto-approve -no-color -var="bot_image=${{ steps.build-bot.outputs.image }}" -var="worker_image=${{ steps.build-worker.outputs.image }}" -var="telegram_token=${{ secrets.TELEGRAM_TOKEN }}" -var="groq_api_key=${{ secrets.GROQ_API_KEY }}" -var="google_ai_api_key=${{ secrets.GOOGLE_AI_API_KEY }}"
+        run: terraform apply -auto-approve -no-color -var="project=$PROJECT" -var="aws_region=$AWS_REGION" -var="bot_image=${{ steps.build-bot.outputs.image }}" -var="worker_image=${{ steps.build-worker.outputs.image }}" -var="telegram_token=${{ secrets.TELEGRAM_TOKEN }}" -var="groq_api_key=${{ secrets.GROQ_API_KEY }}" -var="google_ai_api_key=${{ secrets.GOOGLE_AI_API_KEY }}"
         working-directory: ${{ env.TERRAFORM_WORKING_DIR }}
