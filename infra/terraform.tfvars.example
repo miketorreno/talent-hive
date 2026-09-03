@@ -4,9 +4,12 @@ project     = "talent-hive"
 environment = "dev"
 aws_region  = "eu-west-2"
 
-# Docker images (push to ECR or another registry before applying)
-bot_image    = "123456789012.dkr.ecr.eu-west-2.amazonaws.com/talent-hive-bot:latest"
-worker_image = "123456789012.dkr.ecr.eu-west-2.amazonaws.com/talent-hive-worker:latest"
+# Docker images: leave empty to default to the ECR repo :latest tags. The CI/CD
+# pipeline pushes to these repos. Example:
+# bot_image    = "123456789012.dkr.ecr.eu-west-2.amazonaws.com/talent-hive-bot:latest"
+# worker_image = "123456789012.dkr.ecr.eu-west-2.amazonaws.com/talent-hive-worker:latest"
+bot_image    = ""
+worker_image = ""
 
 # Secrets
 telegram_token  = ""

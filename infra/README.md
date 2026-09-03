@@ -19,7 +19,8 @@ infra/
     ├── ecs/                # ECS cluster, ASG, task defs, services, IAM, secrets
     ├── rds/                # PostgreSQL instance + subnet group + security group
     ├── redis/              # ElastiCache replication group
-    └── s3/                 # Artifacts bucket (private, encrypted, versioned)
+    ├── s3/                 # Artifacts bucket (private, encrypted, versioned)
+    └── ecr/                # Bot + worker ECR image repositories
 ```
 
 ## Usage
@@ -31,9 +32,12 @@ terraform plan
 terraform apply
 ```
 
-Docker images for `bot_image` / `worker_image` are referenced by URI and must be
-pushed to a registry (e.g. ECR) before applying. Build them from
-`packages/bot/Dockerfile` and `packages/worker/Dockerfile`.
+Docker images for the bot and worker services are pushed to the ECR repositories
+this stack provisions (`infra/modules/ecr`). If `bot_image` / `worker_image` are
+left empty they default to the ECR repo `:latest` tags. Build the images from
+`packages/bot/Dockerfile` and `packages/worker/Dockerfile` and push them to ECR
+before (or as part of) applying — the CI/CD pipeline in `.github/workflows/deploy.yml`
+does this automatically on merge to `main`.
 
 Secrets (Telegram token, database URL, Groq/Google keys) are stored in AWS Secrets
 Manager and injected into the ECS task definitions via `valueFrom`.

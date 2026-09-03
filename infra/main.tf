@@ -44,6 +44,16 @@ module "s3" {
   environment = var.environment
 }
 
+# --- ECR Repositories (bot + worker images) -----------------------------------
+
+module "ecr" {
+  source = "./modules/ecr"
+
+  project      = var.project
+  environment  = var.environment
+  force_delete = var.ecr_force_delete
+}
+
 # --- ECS on EC2 (bot + worker) ----------------------------------------------
 
 module "ecs" {
@@ -53,8 +63,8 @@ module "ecs" {
   environment             = var.environment
   vpc_id                  = module.networking.vpc_id
   private_subnet_ids      = module.networking.private_subnet_ids
-  bot_image               = var.bot_image
-  worker_image            = var.worker_image
+  bot_image               = var.bot_image != "" ? var.bot_image : "${module.ecr.bot_repository_url}:latest"
+  worker_image            = var.worker_image != "" ? var.worker_image : "${module.ecr.worker_repository_url}:latest"
   instance_type           = var.ecs_instance_type
   bot_desired_count       = var.bot_desired_count
   worker_desired_count    = var.worker_desired_count

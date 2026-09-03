@@ -1,0 +1,81 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'eu-west-2' }}
+  TF_BACKEND_BUCKET: ${{ vars.TF_BACKEND_BUCKET }}
+  TF_BACKEND_LOCK_TABLE: ${{ vars.TF_BACKEND_LOCK_TABLE }}
+  TF_BACKEND_KEY: ${{ vars.TF_BACKEND_KEY || 'talent-hive/terraform.tfstate' }}
+  TERRAFORM_WORKING_DIR: infra
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      id-token: none
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build and push bot image
+        id: build-bot
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          ECR_REPOSITORY: talent-hive-bot
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -f packages/bot/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push worker image
+        id: build-worker
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          ECR_REPOSITORY: talent-hive-worker
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -f packages/worker/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.7
+
+      - name: Terraform fmt
+        run: terraform fmt -check -diff -no-color
+        working-directory: ${{ env.TERRAFORM_WORKING_DIR }}
+
+      - name: Terraform Init
+        run: terraform init -no-color -backend-config="bucket=$TF_BACKEND_BUCKET" -backend-config="key=$TF_BACKEND_KEY" -backend-config="region=$AWS_REGION" -backend-config="dynamodb_table=$TF_BACKEND_LOCK_TABLE"
+        working-directory: ${{ env.TERRAFORM_WORKING_DIR }}
+
+      - name: Terraform Apply
+        id: apply
+        run: terraform apply -auto-approve -no-color -var="bot_image=${{ steps.build-bot.outputs.image }}" -var="worker_image=${{ steps.build-worker.outputs.image }}" -var="telegram_token=${{ secrets.TELEGRAM_TOKEN }}" -var="groq_api_key=${{ secrets.GROQ_API_KEY }}" -var="google_ai_api_key=${{ secrets.GOOGLE_AI_API_KEY }}"
+        working-directory: ${{ env.TERRAFORM_WORKING_DIR }}
