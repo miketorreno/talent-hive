@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from domain.artifact import ArtifactType
+from domain.refinement import RefinementGoals
 
 SYSTEM_PROMPT = (
     "You write professional hiring documents for a job board called Talent Hive. "
@@ -39,6 +40,7 @@ _JOB_DESCRIPTION_USER = (
     "ROLE TITLE: {job_title}\n"
     "RAW DESCRIPTION:\n{description}\n"
     "REQUIREMENTS SO FAR:\n{requirements}"
+    "{refinement_goals}"
 )
 
 
@@ -53,6 +55,7 @@ class ArtifactContext:
     background: str = ""
     skills: str = ""
     experience: str = ""
+    refinement_goals: RefinementGoals = RefinementGoals()
 
 
 def build_prompt(artifact_type: ArtifactType, context: ArtifactContext) -> str:
@@ -62,7 +65,12 @@ def build_prompt(artifact_type: ArtifactType, context: ArtifactContext) -> str:
         ArtifactType.RESUME: _RESUME_USER,
         ArtifactType.JOB_DESCRIPTION: _JOB_DESCRIPTION_USER,
     }
-    return _prompts[artifact_type].format(**context.__dict__)
+    values = dict(context.__dict__)
+    goals_text = context.refinement_goals.to_prompt_text()
+    values["refinement_goals"] = (
+        f"\n\nREFINEMENT:\n{goals_text}" if goals_text else ""
+    )
+    return _prompts[artifact_type].format(**values)
 
 
 def system_prompt() -> str:

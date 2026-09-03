@@ -10,6 +10,7 @@ from .company import Company, CompanyRegistry, EmployerRole
 from .identities import Role, User
 from .job import Job, JobStatus
 from .profile import SeekerProfile
+from .refinement import LengthTarget, RefinementGoal, RefinementGoals, parse_refinement_goals
 
 __all__ = [
     "User",
@@ -25,4 +26,8 @@ __all__ = [
     "ArtifactType",
     "ArtifactOrigin",
     "SeekerProfile",
+    "RefinementGoals",
+    "RefinementGoal",
+    "LengthTarget",
+    "parse_refinement_goals",
 ]
