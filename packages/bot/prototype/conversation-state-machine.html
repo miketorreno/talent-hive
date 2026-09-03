@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE — throwaway. Do not ship. Lives on prototype/conversation-state-machine.
+
+  QUESTION THIS PROTOTYPE ANSWERS
+  -------------------------------
+  How does the one-bot, both-roles conversational experience of Talent Hive feel and
+  work? More precisely: what are the conversation state machines for first-run role
+  onboarding, posting a job, building a resume via Q&A, gathering cover-letter inputs,
+  and refining a job description — and how does the bot hold and resume state across
+  each, and handle errors and back-navigation?
+
+  The pure logic below (the `ConversationMachine` module) is the bit worth keeping; it
+  is written to lift into the real bot's conversation layer later. The HTML shell around
+  it is throwaway.
+
+  Run: double-click this file in any browser. No server, no install.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Talent Hive — Conversation State Machine (prototype)</title>
+<style>
+  :root{
+    --accent:#2f6fed;
+    --accent-soft:#eaf0fe;
+    --bg:#f7f8fa;
+    --card:#ffffff;
+    --ink:#1c2330;
+    --muted:#6b7686;
+    --line:#e3e7ee;
+    --err:#c0392b;
+    --err-soft:#fdecea;
+    --ok:#1e8e56;
+    --ok-soft:#e8f5ee;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--ink);line-height:1.5;
+  }
+  header{max-width:960px;margin:0 auto;padding:32px 20px 8px}
+  header h1{margin:0 0 6px;font-size:26px}
+  header p{margin:0;color:var(--muted);max-width:740px}
+  header .tag{
+    display:inline-block;background:var(--accent-soft);color:var(--accent);
+    border-radius:20px;padding:2px 12px;font-size:12px;font-weight:600;margin-bottom:10px;
+  }
+  main{max-width:960px;margin:0 auto;padding:20px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+  .card h2{margin:0 0 12px;font-size:16px}
+  .card h3{margin:18px 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .state-panel{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+  .state-panel .field{display:flex;gap:8px;padding:3px 0;border-bottom:1px dashed var(--line)}
+  .state-panel .k{color:var(--muted);min-width:110px;flex:none}
+  .state-panel .v{word-break:break-word}
+  .state-panel .roles span{display:inline-block;background:var(--accent-soft);color:var(--accent);border-radius:12px;padding:0 8px;font-size:12px;margin-right:4px}
+  .changed{color:var(--ok);font-size:12px}
+  .buttons{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+  button{
+    border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:10px;
+    padding:8px 14px;font-size:13px;cursor:pointer;font-family:inherit;
+  }
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#1f5fd8;color:#fff}
+  button.danger{color:var(--err);border-color:var(--err);background:#fff}
+  button.danger:hover{background:var(--err-soft)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .console{background:#0f172033;border:1px solid var(--line);border-radius:10px;padding:10px;min-height:44px;font-size:13px}
+  .bubble{background:var(--accent-soft);border-radius:4px 12px 12px 12px;padding:6px 10px;margin:4px 0;display:inline-block;white-space:pre-wrap;max-width:100%}
+  .bubble.error{background:var(--err-soft);color:var(--err);border-radius:12px 4px 12px 12px}
+  .bubble.ok{background:var(--ok-soft);color:var(--ok);border-radius:12px 12px 4px 12px;align-self:flex-end}
+  .chat{display:flex;flex-direction:column;gap:6px}
+  .tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+  .tab{border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--muted);cursor:pointer;background:#fff}
+  .tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .walk{padding:6px}
+  .walk p{color:var(--muted);font-size:13px;margin:0 0 10px}
+  .walk .step{font-size:12px;color:var(--muted);margin:0 0 4px}
+  .muted{color:var(--muted)}
+  .pill{font-size:11px;font-weight:600;border-radius:10px;padding:1px 8px;margin-left:6px}
+  .pill.flow{background:var(--accent-soft);color:var(--accent)}
+  .pill.idle{background:#eef1f6;color:var(--muted)}
+  .divider{border:none;border-top:1px solid var(--line);margin:18px 0}
+  .row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+</style>
+</head>
+<body>
+<header>
+  <span class="tag">PROTOTYPE — throwaway UX demo</span>
+  <h1>Talent Hive: conversational state machines</h1>
+  <p>
+    Push the one-bot, both-roles conversation through its flows and watch how the bot holds and
+    resumes state moment to moment. Play freely with the buttons, or follow a guided scenario.
+    The panel on the left is the bot's live session state after every action; the chat on the
+    right is what a user would see.
+  </p>
+</header>
+
+<main>
+  <div class="grid">
+    <div class="card">
+      <h2>Bot session state</h2>
+      <div class="state-panel" id="state"></div>
+
+      <h3>Quick actions</h3>
+      <div class="buttons" id="quick"></div>
+
+      <div class="row" style="margin-top:14px">
+        <h3 style="margin:0">Guided scenarios</h3>
+        <button id="resetWalk" class="danger">Reset scenario</button>
+      </div>
+      <div class="tabs" id="tabs"></div>
+      <div class="walk" id="walk"></div>
+    </div>
+
+    <div class="card">
+      <h2>What the user sees</h2>
+      <div class="chat" id="chat"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+/* =======================================================================
+   ConversationMachine — the LIFTABLE, pure logic module.
+   No DOM access. The page below only ever *calls into* it; nothing inside
+   reaches out. This is the part to port into the bot's conversation layer.
+   ======================================================================= */
+
+const ConversationMachine = (() => {
+  const ROLE_KEYS = ['employer', 'job_seeker'];
+
+  /* ---------- flow schema ----------
+     Each flow is a list of steps. A step is an object:
+       id          unique within the flow
+       kind:       'ask'  -> waits for free-text INPUT
+                   'menu' -> waits for a CHOOSE (single)
+                   'multi'-> waits for one-or-more CHOOSEs until an 'ok' option
+                   'loop' -> waits for free text; repeats until a stop token
+                   'term' -> terminal: emits and ends the flow
+       prompt      the question/message the bot shows when entering/resuming this step
+       options?    keyboard options for menu/multi
+       validate?   (value, draft) -> string | null  (returns error message or null)
+       apply?      (draft, value) -> void            (mutates the draft)
+       next        (value, draft) -> object | string (resolved by flow helper below)
+       help?       hint text for the input
+  */
+
+  const flows = {
+
+    onboarding: {
+      title: 'First-run role onboarding',
+      commit(d, s) { s.roles = d.roles; s.company = d.company || null; },
+      steps: [
+        {
+          id: 'ask_roles', kind: 'menu',
+          options: [
+            { key: 'employer',  label: "I'm an Employer (post jobs)" },
+            { key: 'job_seeker',label: "I'm a Job Seeker (find jobs)" },
+            { key: 'both',      label: "I'm both" },
+          ],
+          prompt: 'Welcome to Talent Hive! 👋\nPick your role. You can hold both roles at once.',
+          apply(d) { d.roles = []; },
+          next(v, d) {
+            const keys = v === 'both' ? ROLE_KEYS : [v];
+            d.roles = keys;
+            return keys.includes('employer')
+              ? { step: 'company_name' }
+              : { end: true, message: '✓ You are registered, and ready to find jobs.' };
+          },
+        },
+        {
+          id: 'company_name', kind: 'ask',
+          prompt: "What's the name of the company you're publishing jobs for?",
+          help: 'e.g. "Acme Products"',
+          validate(v) { return v.trim() ? null : 'A company name is required.'; },
+          apply(d, v) { d.company = v.trim(); },
+          next() { return { end: true, message: '✓ Company created. You are its Owner. Ready to post jobs.' }; },
+        },
+      ],
+    },
+
+    post_job: {
+      title: 'Post a job',
+      steps: [
+        {
+          id: 'title', kind: 'ask',
+          prompt: "Let's post a job. What's the job title?",
+          help: 'e.g. "Senior Python Engineer"',
+          validate(v) { return v.trim() ? null : 'A title is required.'; },
+          apply(d, v) { d.title = v.trim(); },
+          next() { return { step: 'description' }; },
+        },
+        {
+          id: 'description', kind: 'ask',
+          prompt: 'Now the job description. What does the role involve?',
+          help: 'a few sentences is fine',
+          validate(v) { return v.trim() ? null : 'A description is required.'; },
+          apply(d, v) { d.description = v.trim(); },
+          next() { return { step: 'requirements' }; },
+        },
+        {
+          id: 'requirements', kind: 'ask',
+          prompt: 'What are the key requirements?',
+          help: 'e.g. "3+ years Python, PostgreSQL"',
+          validate(v) { return v.trim() ? null : 'At least one requirement is needed.'; },
+          apply(d, v) { d.requirements = v.trim(); },
+          next() { return { step: 'menu' }; },
+        },
+        {
+          id: 'menu', kind: 'menu',
+          options: [
+            { key: 'publish',   label: '✅ Publish now (live to seekers)' },
+            { key: 'save_draft',label: '💾 Save as draft' },
+          ],
+          prompt: (d) => `Here's the job so far:\n\n📄 **${d.title}**\n${d.description}\n\n${d.requirements}\n\nWhat next?`,
+          next(v) {
+            return { end: true,
+              message: v === 'publish'
+                ? '✅ Job published and now visible to job seekers.'
+                : '💾 Job saved as a draft. You can publish it later.' };
+          },
+        },
+      ],
+    },
+
+    resume: {
+      title: 'Build a resume (Q&A)',
+      commit(d, s) { s.hasResume = true; s.resume = deep(d); },
+      steps: [
+        {
+          id: 'contact', kind: 'ask',
+          prompt: "Let's build your resume. What's your full name and contact email?",
+          help: 'e.g. "Alex Rivera ✉ alex@email.com"',
+          validate(v) { return (v.trim() && v.includes('@')) ? null : 'Include your email so it can be checked.'; },
+          apply(d, v) { d.contact = v.trim(); },
+          next() { return { step: 'summary' }; },
+        },
+        {
+          id: 'summary', kind: 'ask',
+          prompt: 'A one-line summary about you? (type "skip" to leave blank)',
+          help: 'e.g. "Python engineer, 6 yrs, fintech"',
+          apply(d, v) { d.summary = v.trim() === 'skip' ? '' : v.trim(); },
+          next() { return { step: 'experience' }; },
+        },
+        {
+          id: 'experience', kind: 'loop',
+          prompt: 'Add an experience entry: employer, role, dates, and one highlight.',
+          stop: 'done',
+          help: 'type "done" when you have no more entries',
+          apply(d, v) { if (v !== 'done') (d.experience = d.experience || []).push(v.trim()); },
+          next(v) { return v === 'done' ? { step: 'education' } : { step: 'experience' }; },
+        },
+        {
+          id: 'education', kind: 'ask',
+          prompt: 'Education? (type "skip" to leave blank)',
+          help: 'e.g. "BSc Computer Science, 2015"',
+          apply(d, v) { d.education = v.trim() === 'skip' ? '' : v.trim(); },
+          next() { return { step: 'skills' }; },
+        },
+        {
+          id: 'skills', kind: 'ask',
+          prompt: 'List your key skills, comma-separated.',
+          help: 'e.g. "Python, SQL, AWS"',
+          validate(v) { return v.trim() ? null : 'List at least one skill.'; },
+          apply(d, v) { d.skills = v.trim(); },
+          next() { return { step: 'projects' }; },
+        },
+        {
+          id: 'projects', kind: 'ask',
+          prompt: 'Any projects or links worth showing? (type "skip" to leave blank)',
+          apply(d, v) { d.projects = v.trim() === 'skip' ? '' : v.trim(); },
+          next() { return { step: 'review' }; },
+        },
+        {
+          id: 'review', kind: 'menu',
+          options: [
+            { key: 'finish', label: '✅ Save my resume' },
+          ],
+          prompt: (d) => 'Your resume so far:\n\n' +
+            '**' + (d.contact || '—') + '**\n' +
+            (d.summary ? d.summary + '\n' : '') +
+            'Experience: ' + ((d.experience || []).length) + ' entr' + ((d.experience || []).length === 1 ? 'y' : 'ies') + '\n' +
+            'Skills: ' + (d.skills || '—') + '\n' +
+            (d.education ? d.education + '\n' : '') +
+            (d.projects ? d.projects + '\n' : '') +
+            '\nSave it?',
+          next() {
+            return { end: true, message: '✓ Resume saved to your Seeker Profile. You can regenerate or edit it anytime.' };
+          },
+        },
+      ],
+    },
+
+    coverletter: {
+      title: 'Cover letter',
+      steps: [
+        {
+          id: 'pick_job', kind: 'ask',
+          prompt: "Let's write a cover letter. Which job are you applying to? (paste the job id or title)",
+          help: 'e.g. "7f3a91"',
+          validate(v) { return v.trim() ? null : 'Tell me which job.'; },
+          apply(d, v) { d.job = v.trim(); },
+          next() { return { step: 'resume' }; },
+        },
+        {
+          id: 'resume', kind: 'menu',
+          options: [
+            { key: 'existing', label: 'Use my saved resume' },
+            { key: 'build',    label: 'Build one with Q&A' },
+            { key: 'none',     label: 'Skip — auto-gather from chat' },
+          ],
+          prompt: 'A cover letter needs your background. How do you want to supply it?',
+          next(v, d) {
+            if (v === 'build') return { step: 'resume_build', sub: 'resume' };
+            if (v === 'none') { d.resumeSource = 'chat-auto'; return { step: 'auto' }; }
+            d.resumeSource = 'existing';
+            return { step: 'tone' };
+          },
+        },
+        { /* nested resume Q&A lives here when 'build' chosen */
+          id: 'resume_build', kind: 'subflow', sub: 'resume',
+          prompt: 'OK — we\'ll need a few details. Same questions as building a resume.',
+        },
+        {
+          id: 'auto', kind: 'ask',
+          prompt: 'Tell me a bit about your background relevant to this role.',
+          help: 'a short paragraph is fine',
+          validate(v) { return v.trim() ? null : 'Give me something to work with.'; },
+          apply(d, v) { d.backgroundGathered = v.trim(); },
+          next() { return { step: 'tone' }; },
+        },
+        {
+          id: 'tone', kind: 'ask',
+          prompt: 'Any tone/preferences for the letter? (type "skip" for default)',
+          help: 'e.g. "professional but warm, mention the fintech angle"',
+          apply(d, v) { d.tone = v.trim() === 'skip' ? '' : v.trim(); },
+          next() { return { step: 'confirm' }; },
+        },
+        {
+          id: 'confirm', kind: 'menu',
+          options: [
+            { key: 'generate', label: '✨ Generate my cover letter' },
+          ],
+          prompt: (d) => 'Ready to generate a cover letter for **' + d.job + '**\n' +
+            'Resume source: ' + (d.resumeSource || 'answered') + '\n' +
+            (d.tone ? 'Tone: ' + d.tone + '\n' : '') +
+            '\nGenerate?',
+          next() {
+            return { end: true, message: '✍️ Generated\n\nDear Hiring Team,\n\n[ ...a cover letter drafted from your background, aimed at this job... ]\n\n— Your resume + tone were used.' };
+          },
+        },
+      ],
+    },
+
+    refinejd: {
+      title: 'Refine a job description',
+      steps: [
+        {
+          id: 'paste', kind: 'ask',
+          prompt: 'Paste the job description you want to refine.',
+          help: 'paste the current draft or text',
+          validate(v) { return v.trim().length >= 3 ? null : 'That\'s too short to refine.'; },
+          apply(d, v) { d.draft = v.trim(); },
+          next() { return { step: 'goals' }; },
+        },
+        {
+          id: 'goals', kind: 'multi',
+          options: [
+            { key: 'clarity',    label: 'Clarity' },
+            { key: 'inclusivity',label: 'Inclusivity' },
+            { key: 'skills',     label: 'Skills emphasis' },
+          ],
+          okOption: 'done',
+          okLabel: '✅ Done choosing goals',
+          prompt: 'What should the AI focus on? (pick any, then Done)',
+          apply(d, v) { (d.goals = d.goals || []).push(v); },
+          next(d) { return { step: 'length' }; },
+        },
+        {
+          id: 'length', kind: 'menu',
+          options: [
+            { key: 'shorter', label: '↘ Make it shorter' },
+            { key: 'keep',    label: '↔ Keep the length' },
+            { key: 'longer',  label: '↗ Make it longer' },
+          ],
+          prompt: 'How long should the refined description be?',
+          apply(d, v) { d.length = v; },
+          next() { return { step: 'confirm' }; },
+        },
+        {
+          id: 'confirm', kind: 'menu',
+          options: [
+            { key: 'generate', label: '✨ Refine it' },
+          ],
+          prompt: (d) => 'Refine with focus on: ' + (d.goals.join(', ') || 'none') + '\n' +
+            'Length: ' + d.length + '\n\nRefine?',
+          next() {
+            return { end: true, message: '✨ Refined job description\n\n[ ...the rewritten JD aimed at your chosen goals and length... ]\n\nYou can tweak goals and run it again any time.' };
+          },
+        },
+      ],
+    },
+  };
+
+  /* ---------- session ---------- */
+
+  function deep(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
+
+  function freshSession(userId) {
+    return {
+      userId,
+      roles: [],
+      company: null,
+      hasResume: false,
+      resume: null,
+      active: null,               // { flow, step, draft, history:[stepIds], sub? }
+    };
+  }
+
+  /* ---------- step resolution helpers ---------- */
+
+  function stepDef(flowKey, stepId) {
+    const flow = flows[flowKey];
+    if (!flow) return null;
+    if (stepId === '__start__') {
+      return { id: '__start__', kind: 'term', isFakeStart: true, prompt: `← Start the “${flow.title}” flow.`, next: () => ({ step: flow.steps[0].id }) };
+    }
+    return flow.steps.find((s) => s.id === stepId) || null;
+  }
+
+  function resolveNext(step, value, draft, subFlowKey) {
+    const out = step.next(value, draft);
+    if (typeof out === 'string') return { step: out };
+    if (out.end) return out;
+    return { step: out.step, sub: out.sub, ...(out.sub ? { subFlowKey: subFlowKey || undefined } : {}) };
+  }
+
+  /* Resolve where a subflow's terminal hands control back to. */
+  const SUBFLOW_RETURN = { resume: 'tone' }; // coverletter's resume chooser → after the run, continue to tone
+
+  /* ---------- the reducer ---------- */
+
+  function transition(session, action) {
+    const s = {
+      ...session,
+      roles: [...session.roles],
+      active: session.active ? deep(session.active) : null,
+    };
+
+    if (action.type === 'START') {
+      if (s.active) return { session: s, error: 'You are already in a flow. Use BACK or CANCEL first.' };
+      const flow = flows[action.flow];
+      if (!flow) return { session: s, error: 'Unknown flow.' };
+      const first = flow.steps[0];
+      s.active = { flow: action.flow, step: first.id, draft: {}, history: [first.id] };
+      return { session: s, reply: text(stepDef(action.flow, first.id), s.active) };
+    }
+
+    if (s.active === null) {
+      return { session: s, error: 'Nothing is active. Start a flow first.' };
+    }
+
+    const active = s.active;
+    const flowKey = active.sub && active.subFlowKey ? active.subFlowKey : active.flow;
+    const def = stepDef(flowKey, active.step);
+    if (!def) return { session: s, error: 'Unknown step.' };
+
+    switch (action.type) {
+      case 'RESUME': {
+        return { session: s, reply: text(def, active) };
+      }
+
+      case 'BACK': {
+        const hist = active.history;
+        if (active.sub) {
+          /* inside a subflow -> pop back out to the step that launched it */
+          const launchStep = active.sub;
+          const cut = hist.indexOf(launchStep);
+          const cleanHistory = cut >= 0 ? hist.slice(0, cut + 1) : hist;
+          delete active.draft.__subReturn;
+          active.subFlowKey = null;
+          active.sub = null;
+          active.step = launchStep;
+          active.history = cleanHistory;
+          const backDef = stepDef(active.flow, launchStep);
+          return { session: s, reply: '⬅ Back.\n\n' + text(backDef, active) };
+        }
+        if (hist.length <= 1) {
+          // leaving the flow entirely
+          s.active = null;
+          return { session: s, reply: '← Canceled. You are back at the start menu.' };
+        }
+        // pop current step, reveal previous
+        const prev = hist[hist.length - 2];
+        s.active = { ...active, step: prev, history: hist.slice(0, -1) };
+        const backDef = stepDef(s.active.subFlowKey || s.active.flow, s.active.step);
+        return { session: s, reply: '⬅ Back.\n\n' + text(backDef, s.active) };
+      }
+
+      case 'CANCEL': {
+        s.active = null;
+        return { session: s, reply: '✖ Canceled. You are back at the start menu.' };
+      }
+
+      case 'INPUT': {
+        const value = (action.value || '').trim();
+        const err = def.validate ? def.validate(value, active.draft) : null;
+        if (err) return { session: s, error: err };
+        if (def.apply) def.apply(active.draft, value);
+        return advance(s, def, active, value);
+      }
+
+      case 'CHOOSE': {
+        if (def.kind === 'menu') {
+          const opt = (def.options || []).find((o) => o.key === action.value);
+          if (!opt) return { session: s, error: 'Not a valid choice.' };
+          if (def.apply) def.apply(active.draft, action.value);
+          return advance(s, def, active, action.value);
+        }
+        if (def.kind === 'multi') {
+          const current = active.draft.goals || [];
+          if (action.value === def.okOption) {
+            if (current.length === 0) return { session: s, error: 'Pick at least one goal, or Done to skip.' };
+            return advance(s, def, active, def.okOption);
+          }
+          const opt = (def.options || []).find((o) => o.key === action.value);
+          if (!opt) return { session: s, error: 'Not a valid goal.' };
+          const nextGoals = current.includes(action.value) ? current.filter((g) => g !== action.value) : [...current, action.value];
+          active.draft.goals = nextGoals;
+          return { session: s, reply: toggledMsg(active), expect: 'multi' };
+        }
+        if (def.kind === 'loop') {
+          return advance(s, def, active, action.value);
+        }
+        return { session: s, error: 'This step expects text, not a button choice.' };
+      }
+
+      default:
+        return { session: s, error: 'Unknown action.' };
+    }
+  }
+
+  function advance(s, def, active, value) {
+    const nxt = resolveNext(def, value, active.draft, active.subFlowKey);
+
+    if (nxt.end && active.sub) {
+      /* a subflow finished -> commit it, then loop back into the parent flow */
+      const subFlow = flows[active.subFlowKey];
+      if (subFlow.commit) subFlow.commit(active.draft, s);
+      const returnStep = active.draft.__subReturn || SUBFLOW_RETURN[active.sub];
+      delete active.draft.__subReturn;
+      active.subFlowKey = null;
+      active.sub = null;
+      active.step = returnStep;
+      active.history.push(returnStep);
+      return {
+        session: s,
+        reply: '✓ ' + (nxt.message || 'Done') + '\n\n' + text(stepDef(active.flow, returnStep), active),
+      };
+    }
+
+    if (nxt.end) {
+      const owningFlow = flows[active.subFlowKey || active.flow];
+      if (owningFlow.commit) owningFlow.commit(active.draft, s);
+      s.active = null;
+      return { session: s, reply: nxt.message || '✓ Done.', terminal: true };
+    }
+
+    if (nxt.sub) {
+      const subKey = nxt.sub;
+      const subFlow = flows[subKey];
+      const firstSub = subFlow.steps[0];
+      active.draft.__subReturn = SUBFLOW_RETURN[def.id] || nxt.step;
+      active.subFlowKey = subKey;
+      active.sub = def.id;
+      active.step = firstSub.id;
+      active.history.push(firstSub.id);
+      return { session: s, reply: text(firstSub, active) };
+    }
+
+    active.step = nxt.step;
+    if (active.history[active.history.length - 1] !== active.step) active.history.push(active.step);
+    const nextDef = stepDef(active.subFlowKey || active.flow, active.step);
+    return { session: s, reply: text(nextDef, active) };
+  }
+
+  function text(def, active) {
+    const p = typeof def.prompt === 'function' ? def.prompt(active.draft) : def.prompt;
+    let msg = p;
+    if (def.help) msg += '\n\n_(' + def.help + ')_';
+    return msg;
+  }
+
+  function toggledMsg(active) {
+    const g = active.draft.goals || [];
+    return 'Goals so far: **' + (g.join(', ') || 'none') + '**\n\nTap more, or Done to continue.';
+  }
+
+  /* ---------- helpers for the page ---------- */
+
+  const flowNames = Object.keys(flows);
+
+  function summary(session) {
+    const active = session.active;
+    if (!active) return null;
+    const flowKey = active.subFlowKey || active.flow;
+    const def = stepDef(flowKey, active.step);
+    return {
+      flow: flows[flowKey].title,
+      step: def.id,
+      kind: def.kind,
+      options: def.kind === 'menu' ? def.options : def.kind === 'multi' ? def.options : null,
+      sub: active.sub,
+      draft: active.draft,
+      history: active.history,
+    };
+  }
+
+  return { freshSession, transition, summary, flows, flowNames };
+})();
+
+/* =======================================================================
+   Page shell — throwaway. Only feeds state/actions into the machine and
+   renders the result. Never modifies machine logic.
+   ======================================================================= */
+
+const SAMPLE_JOBS = ['7f3a91 · Senior Python Engineer', '02be14 · Data Analyst'];
+let session;
+let walkState = null; // { scenario, stepIndex, history:[] }
+
+function freshScenario() {
+  session = ConversationMachine.freshSession('demo-user');
+  walkState = null;
+  render();
+}
+
+function act(action, note) {
+  const result = ConversationMachine.transition(session, action);
+  session = result.session;
+  if (result.error) {
+    pushBubble('error', result.error);
+  } else {
+    pushBubble('bot', result.reply);
+    pushBubble('you', note);
+  }
+  render();
+}
+
+const $ = (id) => document.getElementById(id);
+
+function render() {
+  const sum = ConversationMachine.summary(session);
+  const el = $('state');
+
+  el.innerHTML = '';
+  addField('User', 'demo-user');
+  addField('Roles', session.roles.map((r) => `<span>${r === 'employer' ? 'Employer' : 'Job Seeker'}</span>`).join('') || '—');
+  addField('Company', session.company || '—');
+  addField('Has resume', session.hasResume ? '✓ yes' : 'no');
+
+  const tag = sum
+    ? `<span class="pill flow">${sum.flow}</span>`
+    : '<span class="pill idle">idle</span>';
+  addField('Flow', tag);
+  addField('Step', sum ? `${sum.step}${sum.sub ? ` (sub: ${sum.sub})` : ''}` : '—');
+  addField('Draft', sum ? JSON.stringify(sum.draft, null, 1) : '—');
+  addField('Steps visited', sum ? sum.history.join(' → ') : '—');
+
+  // quick actions
+  const q = $('quick');
+  q.innerHTML = '';
+  if (!sum) {
+    ConversationMachine.flowNames.forEach((name) => {
+      const b = document.createElement('button');
+      b.className = 'primary';
+      b.textContent = `Start: ${ConversationMachine.flows[name].title}`;
+      b.onclick = () => act({ type: 'START', flow: name });
+      q.appendChild(b);
+    });
+  } else {
+    const back = document.createElement('button');
+    back.textContent = '⬅ Back';
+    back.onclick = () => act({ type: 'BACK' });
+    q.appendChild(back);
+    const resume = document.createElement('button');
+    resume.textContent = '🔁 Resume (repeat prompt)';
+    resume.onclick = () => act({ type: 'RESUME' });
+    q.appendChild(resume);
+    const cancel = document.createElement('button');
+    cancel.className = 'danger';
+    cancel.textContent = '✖ Cancel flow';
+    cancel.onclick = () => act({ type: 'CANCEL' });
+    q.appendChild(cancel);
+  }
+
+  renderTabs();
+}
+
+function addField(k, html) {
+  const el = $('state');
+  const row = document.createElement('div');
+  row.className = 'field';
+  row.innerHTML = `<span class="k">${k}</span><span class="v">${html || '&nbsp;'}</span>`;
+  el.appendChild(row);
+}
+
+/* ---------- chat ---------- */
+
+function pushBubble(kind, text) {
+  const chat = $('chat');
+  const div = document.createElement('div');
+  div.className = 'bubble ' + kind;
+  div.textContent = text;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+/* ---------- guided scenarios ---------- */
+
+const SCENARIOS = [
+  {
+    name: 'First-run onboarding',
+    desc: 'A brand-new user lands in Talent Hive, picks both roles, and names a company. Watch the machine go idle and hold a company + both roles.',
+    steps: [
+      { label: 'Start first-run onboarding', action: { type: 'START', flow: 'onboarding' }, note: 'User taps "Start talent hive"' },
+      { label: 'Choose "I\'m both"', action: { type: 'CHOOSE', value: 'both' }, note: 'User taps "I\'m both"' },
+      { label: 'Enter company name', action: { type: 'INPUT', value: 'Acme Products' }, note: 'User types "Acme Products"' },
+    ],
+  },
+  {
+    name: 'Post a job (back & redo)',
+    desc: 'An employer posts a job, realizes a typo in the title, goes BACK, fixes it, and publishes. Exercises back-navigation inside a flow.',
+    steps: [
+      { label: 'Start "Post a job"', action: { type: 'START', flow: 'post_job' }, note: 'User taps "Post a job"' },
+      { label: 'Type title', action: { type: 'INPUT', value: 'Senir Python Enginer' }, note: 'User types title (typo!)' },
+      { label: 'Type description', action: { type: 'INPUT', value: 'Build backend services in Python.' }, note: 'User types description' },
+      { label: 'Type requirements', action: { type: 'INPUT', value: '3+ yrs Python, Postgres' }, note: 'User types requirements' },
+      { label: 'Go BACK to fix title', action: { type: 'BACK' }, note: 'User taps ⬅ Back' },
+      { label: 'Go BACK again', action: { type: 'BACK' }, note: 'User taps ⬅ Back again' },
+      { label: 'Re-type title (fixed)', action: { type: 'INPUT', value: 'Senior Python Engineer' }, note: 'User fixes the title' },
+      { label: 'Re-enter description', action: { type: 'INPUT', value: 'Build backend services in Python.' }, note: 'User re-enters description' },
+      { label: 'Re-enter requirements', action: { type: 'INPUT', value: '3+ yrs Python, Postgres' }, note: 'User re-enters requirements' },
+      { label: 'Publish the job', action: { type: 'CHOOSE', value: 'publish' }, note: 'User taps "Publish now"' },
+    ],
+  },
+  {
+    name: 'Resume via Q&A',
+    desc: 'A job seeker builds a full resume through Q&A, skipping optional fields, and saves it. The machine stores a resume on the session.',
+    steps: [
+      { label: 'Start "Build a resume"', action: { type: 'START', flow: 'resume' }, note: 'User taps "Build resume"' },
+      { label: 'Give contact', action: { type: 'INPUT', value: 'Alex Rivera ✉ alex@email.com' }, note: 'User types contact' },
+      { label: 'Give summary', action: { type: 'INPUT', value: 'Python engineer, 6 yrs, fintech' }, note: 'User types summary' },
+      { label: 'Add experience entry 1', action: { type: 'INPUT', value: 'FinCo — Senior Dev — 2020-now — led payments team' }, note: 'User types an experience entry' },
+      { label: 'Add experience entry 2', action: { type: 'INPUT', value: 'StartupX — Dev — 2017-2020 — built API' }, note: 'User types another entry' },
+      { label: 'Say done with experience', action: { type: 'INPUT', value: 'done' }, note: 'User types "done"' },
+      { label: 'Skip education', action: { type: 'INPUT', value: 'skip' }, note: 'User types "skip"' },
+      { label: 'List skills', action: { type: 'INPUT', value: 'Python, SQL, AWS' }, note: 'User types skills' },
+      { label: 'Skip projects', action: { type: 'INPUT', value: 'skip' }, note: 'User types "skip"' },
+      { label: 'Save the resume', action: { type: 'CHOOSE', value: 'finish' }, note: 'User taps "Save my resume"' },
+    ],
+  },
+  {
+    name: 'Cover letter (build resume inline)',
+    desc: 'A seeker writes a cover letter but has no resume, so the flow branches to build one inline via Q&A, then continues to tone and generation.',
+    steps: [
+      { label: 'Start "Cover letter"', action: { type: 'START', flow: 'coverletter' }, note: 'User taps "Cover letter"' },
+      { label: 'Pick the job', action: { type: 'INPUT', value: SAMPLE_JOBS[0] }, note: 'User pastes job ' + SAMPLE_JOBS[0] },
+      { label: 'Choose "Build one with Q&A"', action: { type: 'CHOOSE', value: 'build' }, note: 'User taps "Build one with Q&A"' },
+      { label: 'Resume: give contact', action: { type: 'INPUT', value: 'Alex Rivera ✉ alex@email.com' }, note: 'User types contact' },
+      { label: 'Resume: summary', action: { type: 'INPUT', value: 'Fintech Python engineer' }, note: 'User types summary' },
+      { label: 'Resume: done with experience', action: { type: 'INPUT', value: 'done' }, note: 'User types "done"' },
+      { label: 'Resume: skip education', action: { type: 'INPUT', value: 'skip' }, note: 'User types "skip"' },
+      { label: 'Resume: skills', action: { type: 'INPUT', value: 'Python, SQL' }, note: 'User types skills' },
+      { label: 'Resume: skip projects', action: { type: 'INPUT', value: 'skip' }, note: 'User types "skip"' },
+      { label: 'Resume: save', action: { type: 'CHOOSE', value: 'finish' }, note: 'User taps "Save my resume"' },
+      { label: 'Set tone', action: { type: 'INPUT', value: 'professional but warm, mention fintech' }, note: 'User types tone' },
+      { label: 'Generate the letter', action: { type: 'CHOOSE', value: 'generate' }, note: 'User taps "Generate"' },
+    ],
+  },
+  {
+    name: 'Refine a job description',
+    desc: 'An employer refines a JD, choosing goals and length, then regenerates. Watch the multi-select goals step behave (toggling).',
+    steps: [
+      { label: 'Start "Refine a job description"', action: { type: 'START', flow: 'refinejd' }, note: 'User taps "Refine JD"' },
+      { label: 'Paste the draft JD', action: { type: 'INPUT', value: 'We need a senior Python dev to build stuff. Strong skills required.' }, note: 'User pastes a draft JD' },
+      { label: 'Pick goal: clarity', action: { type: 'CHOOSE', value: 'clarity' }, note: 'User taps Clarity' },
+      { label: 'Pick goal: inclusivity', action: { type: 'CHOOSE', value: 'inclusivity' }, note: 'User taps Inclusivity' },
+      { label: 'Pick goal: skills (toggle)', action: { type: 'CHOOSE', value: 'skills' }, note: 'User taps Skills emphasis' },
+      { label: 'Un-pick clarity (toggle off)', action: { type: 'CHOOSE', value: 'clarity' }, note: 'User taps Clarity again (off)' },
+      { label: 'Done with goals', action: { type: 'CHOOSE', value: 'done' }, note: 'User taps "Done choosing goals"' },
+      { label: 'Choose length: shorter', action: { type: 'CHOOSE', value: 'shorter' }, note: 'User taps "Make it shorter"' },
+      { label: 'Refine it', action: { type: 'CHOOSE', value: 'generate' }, note: 'User taps "Refine it"' },
+    ],
+  },
+  {
+    name: 'Error handling',
+    desc: 'The bot rejects invalid input and stays on the same step, then the user CANCELs out of the flow entirely and returns to idle.',
+    steps: [
+      { label: 'Start "Post a job"', action: { type: 'START', flow: 'post_job' }, note: 'User taps "Post a job"' },
+      { label: 'Type an empty title (error)', action: { type: 'INPUT', value: '   ' }, note: 'User submits a blank title' },
+      { label: 'Type a valid title', action: { type: 'INPUT', value: 'Data Analyst' }, note: 'User types a valid title' },
+      { label: 'Type description', action: { type: 'INPUT', value: 'Analyze usage data and report.' }, note: 'User types description' },
+      { label: 'Cancel the flow', action: { type: 'CANCEL' }, note: 'User taps ✖ Cancel' },
+    ],
+  },
+];
+
+function renderTabs() {
+  const tabs = $('tabs');
+  tabs.innerHTML = '';
+  SCENARIOS.forEach((s, i) => {
+    const t = document.createElement('div');
+    t.className = 'tab' + (walkState && walkState.scenario === i ? ' active' : '');
+    t.textContent = s.name;
+    t.onclick = () => { walkState = { scenario: i, stepIndex: 0 }; render(); };
+    tabs.appendChild(t);
+  });
+  renderWalk();
+}
+
+function renderWalk() {
+  const walk = $('walk');
+  if (!walkState) {
+    walk.innerHTML = '<p class="muted">Pick a scenario above to run it step by step. Each scenario starts clean, resets the session, and walks a single journey.</p>';
+    return;
+  }
+  const sc = SCENARIOS[walkState.scenario];
+  let html = `<p>${sc.desc}</p>`;
+  sc.steps.forEach((st, i) => {
+    const done = i < walkState.stepIndex;
+    const cur = i === walkState.stepIndex;
+    html += `<div class="step">${done ? '✓ ' : cur ? '▸ ' : '· '}${st.label}</div>`;
+  });
+  walk.innerHTML = html;
+
+  const nextBtn = document.createElement('button');
+  if (walkState.stepIndex < sc.steps.length) {
+    nextBtn.className = 'primary';
+    nextBtn.textContent = sc.steps[walkState.stepIndex].label + ' →';
+    nextBtn.onclick = () => {
+      const st = sc.steps[walkState.stepIndex];
+      // reset to fresh on first step of a walkthrough, unless we're continuing
+      if (walkState.stepIndex === 0) {
+        session = ConversationMachine.freshSession('demo-user');
+        $('chat').innerHTML = '';
+      }
+      const result = ConversationMachine.transition(session, st.action);
+      session = result.session;
+      if (result.error) pushBubble('error', result.error);
+      else { pushBubble('bot', result.reply); pushBubble('you', st.note); }
+      walkState.stepIndex += 1;
+      render();
+    };
+  } else {
+    nextBtn.textContent = '↺ Play again';
+    nextBtn.onclick = () => { walkState.stepIndex = 0; render(); };
+  }
+  walk.appendChild(nextBtn);
+}
+
+document.getElementById('resetWalk').onclick = () => { freshScenario(); };
+
+freshScenario();
+</script>
+</body>
+</html>
