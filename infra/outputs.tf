@@ -37,3 +37,13 @@ output "database_url_secret_arn" {
   description = "ARN of the Secrets Manager secret containing the database URL."
   value       = module.rds.password_secret_arn
 }
+
+output "bot_repository_url" {
+  description = "URL of the bot ECR repository."
+  value       = module.ecr.bot_repository_url
+}
+
+output "worker_repository_url" {
+  description = "URL of the worker ECR repository."
+  value       = module.ecr.worker_repository_url
+}

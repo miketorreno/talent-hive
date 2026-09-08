@@ -99,7 +99,7 @@ async def test_coverletter_queues_generation() -> None:
     )
 
     assert arq.jobs == [
-        ("generate_artifact", ("cover_letter", 1), {"job_id": "j1"})
+        ("generate_artifact", ("cover_letter", 1), {"job_id": "j1", "goals": None})
     ]
     assert "queued" in update.effective_chat.messages[-1]
 
@@ -151,7 +151,11 @@ async def test_resume_queues_generation() -> None:
 
     await resume(update, FakeContext(store, arq=arq))  # type: ignore[arg-type]
 
-    expected = ("generate_artifact", ("resume", 1), {"job_id": None})
+    expected = (
+        "generate_artifact",
+        ("resume", 1),
+        {"job_id": None, "goals": None},
+    )
     assert arq.jobs == [expected]
     assert "queued" in update.effective_chat.messages[-1]
 
@@ -171,7 +175,7 @@ async def test_resume_queues_generation_with_job() -> None:
         update, FakeContext(store, ["j1"], arq=arq)  # type: ignore[arg-type]
     )
 
-    expected = ("generate_artifact", ("resume", 1), {"job_id": "j1"})
+    expected = ("generate_artifact", ("resume", 1), {"job_id": "j1", "goals": None})
     assert arq.jobs == [expected]
     assert "queued" in update.effective_chat.messages[-1]
 
@@ -235,10 +239,34 @@ async def test_refinejd_queues_generation_for_company_job() -> None:
     expected = (
         "generate_artifact",
         ("job_description", 1),
-        {"job_id": "j1"},
+        {"job_id": "j1", "goals": None},
     )
     assert arq.jobs == [expected]
     assert "queued" in update.effective_chat.messages[-1]
+
+
+@pytest.mark.asyncio
+async def test_refinejd_passes_refinement_goals() -> None:
+    store = make_store()
+    await register_employer(store, 1)
+    company = Company(id="c1", name="Acme")
+    company.set_owner(1)
+    await store.companies.save(company)
+    await store.jobs.save(_JOB)
+    arq = FakeArq()
+    update = FakeUpdate(1)
+
+    await refinejd(
+        update, FakeContext(store, ["j1", "clarity", "skills", "shorter"], arq=arq)  # type: ignore[arg-type]
+    )
+
+    expected = (
+        "generate_artifact",
+        ("job_description", 1),
+        {"job_id": "j1", "goals": ["clarity", "skills", "shorter"]},
+    )
+    assert arq.jobs == [expected]
+    assert "goals" in update.effective_chat.messages[-1]
 
 
 @pytest.mark.asyncio

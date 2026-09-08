@@ -11,6 +11,7 @@ from arq.connections import RedisSettings
 from domain.artifact import Artifact, ArtifactOrigin, ArtifactType
 from domain.job import Job
 from domain.profile import SeekerProfile
+from domain.refinement import parse_refinement_goals
 from httpx import AsyncClient
 from shared.config import get_settings
 from shared.store import build_store
@@ -21,6 +22,7 @@ async def _build_context(
     profile: SeekerProfile | None,
     job: Job | None,
     company_name: str = "",
+    goals_tokens: list[str] | None = None,
 ) -> ArtifactContext:
     if artifact_type in (ArtifactType.COVER_LETTER, ArtifactType.RESUME):
         if not profile:
@@ -46,6 +48,7 @@ async def _build_context(
             job_title=job.title,
             description=job.description,
             requirements=job.requirements,
+            refinement_goals=parse_refinement_goals(goals_tokens or []),
         )
     raise ProviderError(f"unsupported artifact type: {artifact_type.value}")
 
@@ -55,6 +58,7 @@ async def generate_artifact(
     artifact_type_value: str,
     owner_id: int,
     job_id: str | None = None,
+    goals: list[str] | None = None,
 ) -> str:
     """Generate an AI artifact from profile/job context and persist it.
 
@@ -72,7 +76,9 @@ async def generate_artifact(
         company = await store.companies.get(job.company_id)
         if company is not None:
             company_name = company.name
-    context = await _build_context(artifact_type, profile, job, company_name)
+    context = await _build_context(
+        artifact_type, profile, job, company_name, goals_tokens=goals
+    )
 
     async with AsyncClient(timeout=60.0) as http_client:
         router = build_router(settings, http_client=http_client)

@@ -4,7 +4,7 @@ import json
 from abc import ABC, abstractmethod
 from typing import cast
 
-from domain.company import Company
+from domain.company import Company, raise_one_company_per_owner_when
 from redis import asyncio as aioredis
 
 _COMPANY_KEY = "th:company:{id}"
@@ -43,12 +43,9 @@ class RedisCompanyRepository(CompanyRepository):
         return _decode_company(raw)
 
     async def find_by_owner(self, owner_id: int) -> Company | None:
-        raw = await self._redis.get(  # type: ignore[misc]
-            _COMPANY_BY_OWNER_KEY.format(owner_id=owner_id)
-        )
-        if raw is None:
+        company_id = await self._company_id_for_owner(owner_id)
+        if company_id is None:
             return None
-        company_id = raw.decode() if isinstance(raw, bytes) else raw
         return await self.get(company_id)
 
     async def find_by_member(self, user_id: int) -> Company | None:
@@ -61,6 +58,8 @@ class RedisCompanyRepository(CompanyRepository):
         return await self.get(company_id)
 
     async def save(self, company: Company) -> None:
+        if company.owner_id is not None:
+            await self._enforce_one_company_per_owner(company)
         await self._redis.set(  # type: ignore[misc]
             _COMPANY_KEY.format(id=company.id), _encode_company(company)
         )
@@ -70,6 +69,22 @@ class RedisCompanyRepository(CompanyRepository):
                 company.id,
             )
         await self._sync_members(company)
+
+    async def _enforce_one_company_per_owner(self, company: Company) -> None:
+        existing_id = await self._company_id_for_owner(company.owner_id)
+        raise_one_company_per_owner_when(
+            existing_id is not None and existing_id != company.id
+        )
+
+    async def _company_id_for_owner(self, owner_id: int | None) -> str | None:
+        if owner_id is None:
+            return None
+        raw = await self._redis.get(  # type: ignore[misc]
+            _COMPANY_BY_OWNER_KEY.format(owner_id=owner_id)
+        )
+        if raw is None:
+            return None
+        return raw.decode() if isinstance(raw, bytes) else raw
 
     async def delete(self, company_id: str) -> None:
         company = await self.get(company_id)

@@ -28,13 +28,18 @@ async def _enqueue(
     artifact_type: ArtifactType,
     owner_id: int,
     job_id: str | None = None,
+    goals: list[str] | None = None,
 ) -> bool:
     """Enqueue an AI generation job on the arq pool, if one is wired up."""
     pool = cast(ArqRedis | None, context.bot_data.get("arq"))
     if pool is None:
         return False
     await pool.enqueue_job(  # type: ignore[misc]
-        "generate_artifact", artifact_type.value, owner_id, job_id=job_id
+        "generate_artifact",
+        artifact_type.value,
+        owner_id,
+        job_id=job_id,
+        goals=goals,
     )
     return True
 
@@ -45,9 +50,10 @@ async def _enqueue_or_warn(
     artifact_type: ArtifactType,
     owner_id: int,
     job_id: str | None = None,
+    goals: list[str] | None = None,
 ) -> bool:
     """Try to enqueue; send a warning and return False if the worker is offline."""
-    if await _enqueue(context, artifact_type, owner_id, job_id):
+    if await _enqueue(context, artifact_type, owner_id, job_id, goals):
         return True
     assert update.effective_chat is not None
     await update.effective_chat.send_message(
@@ -123,7 +129,11 @@ async def refinejd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     args = context.args or []
     if not args:
-        await update.effective_chat.send_message("Usage: /refinejd <job_id>")
+        await update.effective_chat.send_message(
+            "Usage: /refinejd <job_id> [goals...]\n\n"
+            "Goals: clarity, inclusivity, skills — and a length of "
+            "shorter, keep, or longer."
+        )
         return
     store = get_store(context)
     assert store is not None
@@ -134,10 +144,15 @@ async def refinejd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             f"No job `{args[0]}` in your company."
         )
         return
-    if not await _enqueue_or_warn(update, context, ArtifactType.JOB_DESCRIPTION, owner_id, job.id):
+    goals = args[1:]
+    if not await _enqueue_or_warn(
+        update, context, ArtifactType.JOB_DESCRIPTION, owner_id, job.id, goals or None
+    ):
         return
+    suffix = f" with goals: {' '.join(goals)}" if goals else ""
     await update.effective_chat.send_message(
-        f"📝 Job description queued for **{job.title}**. Check /artifacts in a moment."
+        f"📝 Job description queued for **{job.title}**{suffix}. "
+        "Check /artifacts in a moment."
     )
 
 

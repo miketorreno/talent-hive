@@ -26,6 +26,9 @@ class JobRepository(ABC):
     async def list_published(self) -> list[Job]: ...
 
     @abstractmethod
+    async def search_published(self, query: str) -> list[Job]: ...
+
+    @abstractmethod
     async def save(self, job: Job) -> None: ...
 
     @abstractmethod
@@ -59,6 +62,10 @@ class RedisJobRepository(JobRepository):
         )
         jobs = [await self.get(job_id.decode()) for job_id in ids]
         return [job for job in jobs if job is not None]
+
+    async def search_published(self, query: str) -> list[Job]:
+        jobs = await self.list_published()
+        return [job for job in jobs if job.matches(query)]
 
     async def save(self, job: Job) -> None:
         await self._redis.set(  # type: ignore[misc]

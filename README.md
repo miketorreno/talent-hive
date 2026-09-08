@@ -43,3 +43,12 @@ cd packages/bot && poetry install && poetry run talent-hive-bot
 ```
 
 See `CONTEXT.md` for the domain vocabulary used across the codebase.
+
+## CI/CD
+
+- **CI** (`.github/workflows/ci.yml`): lint + test + typecheck on every PR and push to `main`.
+- **CD** (`.github/workflows/deploy.yml`): on a green `main` run, builds the bot + worker
+  images, pushes them to ECR, and runs `terraform apply` to deploy to ECS.
+- **First-time AWS setup** (HITL): run `scripts/setup-aws-cicd.sh` to create the CI IAM
+  user, wire AWS credentials and app secrets as GitHub secrets/variables, create the Terraform
+  remote state backend, and validate. See `infra/README.md` for the deployment layout.

@@ -39,6 +39,7 @@ from .seekers import (
     jobs,
     my_applications,
     profile,
+    search,
     seeker_help,
     withdraw,
 )
@@ -73,6 +74,7 @@ def build_application(token: str, redis_url: str) -> Application:
     app.add_handler(CommandHandler("addexperience", add_experience))
     app.add_handler(CommandHandler("background", background))
     app.add_handler(CommandHandler("jobs", jobs))
+    app.add_handler(CommandHandler("search", search))
     app.add_handler(CommandHandler("apply", apply))
     app.add_handler(CommandHandler("myapps", my_applications))
     app.add_handler(CommandHandler("withdraw", withdraw))

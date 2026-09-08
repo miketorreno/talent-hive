@@ -27,13 +27,23 @@ variable "vpc_cidr" {
 # --- ECS --------------------------------------------------------------------
 
 variable "bot_image" {
-  description = "Docker image URI for the bot service."
+  description = "Docker image URI for the bot service. Leave empty to use the ECR repository tag :latest."
   type        = string
+  default     = ""
 }
 
 variable "worker_image" {
-  description = "Docker image URI for the worker service."
+  description = "Docker image URI for the worker service. Leave empty to use the ECR repository tag :latest."
   type        = string
+  default     = ""
+}
+
+# --- ECR --------------------------------------------------------------------
+
+variable "ecr_force_delete" {
+  description = "Force deletion of ECR repositories on destroy even if they contain images."
+  type        = bool
+  default     = false
 }
 
 variable "ecs_instance_type" {

@@ -181,6 +181,39 @@ async def test_job_description_generation_requires_job(
 
 
 @pytest.mark.asyncio
+async def test_job_description_generation_applies_refinement_goals(
+    monkeypatch, store: Store, provider: FakeProvider
+) -> None:
+    await store.jobs.save(
+        Job(id="j1", company_id="c1", title="Engineer", description="Build", requirements="Python")
+    )
+    _patch_environment(monkeypatch, store, provider)
+
+    await worker_main.generate_artifact(
+        {}, "job_description", 7, job_id="j1", goals=["clarity", "shorter"]
+    )
+
+    _, user = provider.calls[0]
+    assert "clearer" in user
+    assert "shorter" in user
+
+
+@pytest.mark.asyncio
+async def test_job_description_generation_without_goals_omits_them(
+    monkeypatch, store: Store, provider: FakeProvider
+) -> None:
+    await store.jobs.save(
+        Job(id="j1", company_id="c1", title="Engineer", description="Build", requirements="Python")
+    )
+    _patch_environment(monkeypatch, store, provider)
+
+    await worker_main.generate_artifact({}, "job_description", 7, job_id="j1")
+
+    _, user = provider.calls[0]
+    assert "REFINEMENT" not in user
+
+
+@pytest.mark.asyncio
 async def test_resume_generation_requires_profile(
     monkeypatch, store: Store, provider: FakeProvider
 ) -> None:

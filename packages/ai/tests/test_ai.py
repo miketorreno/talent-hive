@@ -113,6 +113,33 @@ def test_build_prompt_knows_all_artifact_types() -> None:
         assert prompt
 
 
+def test_job_description_prompt_includes_refinement_goals() -> None:
+    from domain.refinement import LengthTarget, RefinementGoal, RefinementGoals
+
+    goals = RefinementGoals(
+        goals=frozenset({RefinementGoal.CLARITY, RefinementGoal.SKILLS_EMPHASIS}),
+        length=LengthTarget.SHORTER,
+    )
+    prompt = build_prompt(
+        ArtifactType.JOB_DESCRIPTION,
+        ArtifactContext(
+            job_title="Engineer", description="d", requirements="r",
+            refinement_goals=goals,
+        ),
+    )
+    assert "clearer" in prompt
+    assert "skills" in prompt
+    assert "shorter" in prompt
+
+
+def test_job_description_prompt_without_goals_is_clean() -> None:
+    prompt = build_prompt(
+        ArtifactType.JOB_DESCRIPTION,
+        ArtifactContext(job_title="Engineer", description="d", requirements="r"),
+    )
+    assert "REFINEMENT" not in prompt
+
+
 class FakeResponse:
     def __init__(self, payload: dict) -> None:
         self._payload = payload
