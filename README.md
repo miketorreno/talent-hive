@@ -1,8 +1,9 @@
 # Talent Hive
 
 An AI-powered Telegram job board that connects employers and job seekers via a
-Telegram bot. Uses AI (through a provider-agnostic abstraction) to automate
-generation of cover letters, resumes, and job descriptions.
+Telegram bot. Automates generation of cover letters, resumes, and job descriptions.
+
+![](public/talent-hive.png)
 
 ## Monorepo layout
 
